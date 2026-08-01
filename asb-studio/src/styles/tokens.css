@@ -1,0 +1,205 @@
+/* ==========================================================================
+   styles/tokens.css
+   --------------------------------------------------------------------------
+   Every colour, size and duration in the studio is defined here and nowhere
+   else. If a literal value appears in another stylesheet, that is a bug.
+
+   The palette is lifted straight from the publishing house's own identity
+   document: warm paper, ink grey, ochre. Two themes share one set of names,
+   so no other file ever needs to know which theme is active.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Typeface
+   Arad is the house face. It is a variable font, so one file covers every
+   weight. If webfonts/Arad-VF.woff2 is missing the studio falls back to
+   Vazirmatn and still works - it just stops looking like itself.
+   -------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Arad';
+  src: url('../../webfonts/Arad-VF.woff2') format('woff2-variations'),
+       url('../../webfonts/Arad-VF.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-ui: 'Arad', Vazirmatn, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* --- brand constants, identical in both themes --------------------- */
+  --ochre: #d49a00;
+  --ochre-bright: #e6a800;
+  --ink: #1a1a1a;
+  --paper-warm: #f9f8f5;
+  --cream: #e6e2d6;
+  --highlight: #fff9e6;
+
+  /* --- type scale ----------------------------------------------------- */
+  --editor-size: 1.03rem;
+  --editor-leading: 2.1;
+  --preview-size: 1.08rem;
+  --preview-leading: 2.2;
+
+  /* --- geometry ------------------------------------------------------- */
+  --bar-h: 46px;
+  --menu-h: 30px;
+  --tab-h: 32px;
+  --toolbar-h: 40px;
+  --status-h: 32px;
+  --sidebar-w: 316px;
+  --radius: 10px;
+  --radius-sm: 7px;
+
+  --fast: 0.14s ease-out;
+}
+
+/* --------------------------------------------------------------------------
+   Themes
+
+   Four surfaces, one set of names. Nothing outside this file knows which one
+   is running - every other stylesheet reads the same variables.
+
+     paper  warm straw, the printed identity. Default.
+     white  clean and neutral, for photographs and long proofreading.
+     grey   mid grey, easy on the eyes at night without going black.
+     dark   near black, the original studio.
+   -------------------------------------------------------------------------- */
+
+:root, [data-theme='paper'] {
+  /* The writing surface used to be pure #ffffff, which made this theme and
+     the white one all but identical - the page is the largest thing on the
+     screen, so if it matches, everything matches. It is straw-coloured now,
+     and the greys are warmed to match rather than sitting cold on top of it. */
+  --bg: #e7e0cf;
+  --panel: #f5f0e2;
+  --panel-2: #ede6d5;
+  --paper: #fdf9ee;
+  --line: #d5ccb4;
+  --line-soft: #e5dcc6;
+
+  --fg: #3a352c;
+  --fg-dim: #6b6354;
+  --fg-faint: #9a9180;
+
+  --accent: #b07d00;
+  --accent-strong: #8c6200;
+  --accent-wash: #f8eed2;
+  --on-accent: #ffffff;
+
+  --link: #1d6a86;
+  --ok: #2c7550;
+  --err: #ab362d;
+  --warn: #8d6208;
+
+  --line-active: rgba(90, 78, 50, 0.045);
+  --selection: rgba(90, 82, 66, 0.16);
+  --selection-match: rgba(90, 82, 66, 0.09);
+  --match: rgba(90, 82, 66, 0.16);
+  --match-active: rgba(200, 145, 0, 0.34);
+  --trailing-space: rgba(160, 140, 90, 0.45);
+  --shadow: 0 1px 2px rgba(70, 58, 25, 0.07), 0 8px 24px rgba(70, 58, 25, 0.08);
+  --scrim: rgba(36, 30, 16, 0.34);
+}
+
+[data-theme='white'] {
+  --bg: #e9e9ec;
+  --panel: #ffffff;
+  --panel-2: #f4f4f6;
+  --paper: #ffffff;
+  --line: #dededf;
+  --line-soft: #eeeef0;
+
+  --fg: #2f3033;
+  --fg-dim: #6a6c70;
+  --fg-faint: #a6a8ad;
+
+  --accent: #b08000;
+  --accent-strong: #8f6800;
+  --accent-wash: #fdf3d9;
+  --on-accent: #ffffff;
+
+  --link: #1b6a92;
+  --ok: #2c7a52;
+  --err: #b23a31;
+  --warn: #8f6404;
+
+  --line-active: rgba(0, 0, 0, 0.025);
+  --selection: rgba(60, 62, 68, 0.15);
+  --selection-match: rgba(60, 62, 68, 0.08);
+  --match: rgba(60, 62, 68, 0.15);
+  --match-active: rgba(212, 154, 0, 0.32);
+  --trailing-space: rgba(130, 130, 140, 0.5);
+  --shadow: 0 1px 2px rgba(20, 20, 25, 0.06), 0 8px 26px rgba(20, 20, 25, 0.09);
+  --scrim: rgba(25, 25, 30, 0.34);
+}
+
+[data-theme='grey'] {
+  --bg: #26272b;
+  --panel: #2e3035;
+  --panel-2: #35373d;
+  --paper: #303237;
+  --line: #43454c;
+  --line-soft: #3a3c42;
+
+  --fg: #e4e4e6;
+  --fg-dim: #a8a9ae;
+  --fg-faint: #75767c;
+
+  --accent: #dca80f;
+  --accent-strong: #ecbb2e;
+  --accent-wash: rgba(220, 168, 15, 0.15);
+  --on-accent: #241c05;
+
+  --link: #7fbcd6;
+  --ok: #59bb88;
+  --err: #e8776f;
+  --warn: #dcae2b;
+
+  --line-active: rgba(255, 255, 255, 0.03);
+  --selection: rgba(215, 218, 226, 0.16);
+  --selection-match: rgba(215, 218, 226, 0.08);
+  --match: rgba(215, 218, 226, 0.16);
+  --match-active: rgba(220, 168, 15, 0.34);
+  --trailing-space: rgba(180, 185, 195, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.34);
+  --scrim: rgba(10, 10, 12, 0.5);
+}
+
+[data-theme='dark'] {
+  --bg: #0e0e10;
+  --panel: #16161a;
+  --panel-2: #1e1e23;
+  --paper: #131316;
+  --line: #2b2b31;
+  --line-soft: #232328;
+
+  --fg: #e8e6e0;
+  --fg-dim: #9c9a94;
+  --fg-faint: #64625d;
+
+  --accent: #d49a00;
+  --accent-strong: #e6a800;
+  --accent-wash: rgba(212, 154, 0, 0.14);
+  --on-accent: #1a1509;
+
+  --link: #74b3cc;
+  --ok: #4caf7d;
+  --err: #e06b63;
+  --warn: #d4a017;
+
+  --line-active: rgba(255, 255, 255, 0.025);
+  --selection: rgba(226, 224, 216, 0.15);
+  --selection-match: rgba(226, 224, 216, 0.07);
+  --match: rgba(226, 224, 216, 0.15);
+  --match-active: rgba(212, 154, 0, 0.34);
+  --trailing-space: rgba(170, 165, 155, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --scrim: rgba(0, 0, 0, 0.58);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --fast: 0s; }
+  * { animation: none !important; transition: none !important; }
+}

@@ -1,0 +1,99 @@
+/* ==========================================================================
+   styles/dialog.css
+   Floating panels: the tooltip and the modal card.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Tooltip
+   Positioned by ui/tooltip.js, which is why there is no transform trickery
+   here. Fixed positioning keeps it clear of the ribbon's scroll clipping.
+   -------------------------------------------------------------------------- */
+.tooltip {
+  position: fixed; top: 0; left: 0; z-index: 900;
+  background: var(--ink); color: #f5f2ea;
+  font-family: var(--font-ui); font-size: 0.73rem; line-height: 1.6;
+  padding: 6px 10px; border-radius: 6px;
+  max-width: 260px; text-align: center;
+  pointer-events: none; opacity: 0;
+  transition: opacity var(--fast);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.tooltip.is-visible { opacity: 1; }
+
+[data-theme='dark'] .tooltip { background: #2c2c33; color: var(--fg); }
+
+/* --------------------------------------------------------------------------
+   Modal card
+   -------------------------------------------------------------------------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 800;
+  display: grid; place-items: center;
+  padding: 24px;
+  background: rgba(20, 18, 12, 0.45);
+  backdrop-filter: blur(3px);
+}
+[data-theme='dark'] .overlay { background: rgba(0, 0, 0, 0.6); }
+
+.dialog {
+  display: flex; flex-direction: column;
+  width: min(680px, 100%); max-height: min(78vh, 720px);
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: dialog-in 0.16s ease-out;
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+.dialog__head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.dialog__head h2 { font-size: 0.95rem; font-weight: 700; margin-inline-end: auto; }
+
+.dialog__body { padding: 6px 18px 16px; overflow-y: auto; }
+
+.dialog__text { font-size: 0.87rem; line-height: 2; padding: 10px 0; }
+
+.dialog__actions {
+  display: flex; gap: 8px; justify-content: flex-start;
+  padding: 13px 18px; border-top: 1px solid var(--line);
+  background: var(--panel-2); flex-shrink: 0;
+}
+
+.dialog--wide { width: min(720px, 100%); }
+
+.dialog__foot {
+  padding: 12px 18px; border-top: 1px solid var(--line);
+  font-size: 0.73rem; color: var(--fg-dim); line-height: 1.85; flex-shrink: 0;
+}
+.dialog__foot code { font-family: var(--font-mono); direction: ltr; unicode-bidi: isolate; }
+
+/* --------------------------------------------------------------------------
+   The shortcut table
+   -------------------------------------------------------------------------- */
+.keys__group { margin-top: 16px; }
+.keys__group h3 {
+  font-size: 0.75rem; font-weight: 700; color: var(--accent-strong);
+  margin-bottom: 7px;
+}
+.keys__row {
+  display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--line-soft);
+}
+.keys__row:last-child { border-bottom: 0; }
+.keys__row dd { font-size: 0.82rem; color: var(--fg); }
+
+kbd {
+  display: inline-block;
+  font-family: var(--font-mono); font-size: 0.71rem; line-height: 1.5;
+  direction: ltr; unicode-bidi: isolate;
+  background: var(--paper); color: var(--fg-dim);
+  border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 5px; padding: 3px 7px; white-space: nowrap;
+}

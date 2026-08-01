@@ -1,0 +1,141 @@
+/* ==========================================================================
+   styles/panel.css
+   --------------------------------------------------------------------------
+   The publish panel.
+
+   The frontmatter used to live in a permanent column. It does not belong
+   there: an author edits the metadata twice in a document's life and edits
+   the prose for hours. A permanent panel taxes the common case to serve the
+   rare one - and it was also the source of the layout bug, because a column
+   that can vanish is a column that can take the layout with it.
+
+   Now it slides in from the reading edge when it is wanted, over the text,
+   and leaves nothing behind when it goes.
+   ========================================================================== */
+
+.panel-scrim {
+  position: fixed; inset: 0; z-index: 500;
+  background: var(--scrim);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--fast);
+}
+.panel-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+.panel {
+  position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 510;
+  width: min(392px, 92vw);
+  display: flex; flex-direction: column;
+  background: var(--panel);
+  border-inline-end: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  transform: translateX(-100%);
+  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* In a right-to-left page the inline start is the right edge, so the panel
+   slides out that way. */
+html[dir='rtl'] .panel { transform: translateX(100%); }
+.panel.is-open, html[dir='rtl'] .panel.is-open { transform: none; }
+
+.panel__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 15px 18px; flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+}
+.panel__head h2 { font-size: 0.95rem; font-weight: 700; }
+.panel__head .spacer { margin-inline-start: auto; }
+
+.panel__body { flex: 1; overflow-y: auto; }
+
+.panel__foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 13px 18px; flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.panel__foot .btn { flex: 1; justify-content: center; }
+
+/* --------------------------------------------------------------------------
+   Readiness report at the top of the panel
+   -------------------------------------------------------------------------- */
+
+.ready {
+  margin: 14px 16px; padding: 13px 15px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  font-size: 0.82rem; line-height: 1.9;
+}
+.ready--ok { border-color: var(--ok); color: var(--ok); }
+.ready--block { border-color: var(--err); }
+.ready--warn { border-color: var(--warn); }
+
+.ready__title { font-weight: 700; margin-bottom: 7px; }
+.ready--block .ready__title { color: var(--err); }
+.ready--warn .ready__title { color: var(--warn); }
+
+.ready__list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.ready__item { display: flex; gap: 8px; align-items: flex-start; color: var(--fg-dim); }
+.ready__item::before { content: '—'; color: var(--fg-faint); flex-shrink: 0; }
+.ready__item b { color: var(--fg); font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Paper view: the preview at the width the site actually renders
+   -------------------------------------------------------------------------- */
+
+.pane--preview.paper-view .pane__body { background: var(--bg); padding: 26px 0; }
+.pane--preview.paper-view .preview {
+  background: var(--paper);
+  max-width: 46rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  padding: 64px 72px;
+}
+@media (max-width: 900px) {
+  .pane--preview.paper-view .preview { padding: 34px 26px; }
+}
+
+/* --------------------------------------------------------------------------
+   Statistics card
+   -------------------------------------------------------------------------- */
+
+.stats__grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 18px;
+}
+.stats__cell {
+  padding: 12px 14px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--paper);
+}
+.stats__value { display: block; font-size: 1.3rem; font-weight: 700; line-height: 1.4; }
+.stats__label { font-size: 0.71rem; color: var(--fg-dim); }
+
+.stats__section { margin-top: 16px; }
+.stats__section h3 { font-size: 0.78rem; font-weight: 700; color: var(--accent-strong); margin-bottom: 8px; }
+.stats__section p.empty { font-size: 0.8rem; color: var(--fg-dim); }
+
+.stats__row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line-soft);
+  font-size: 0.82rem;
+}
+.stats__row:last-child { border-bottom: 0; }
+.stats__row .spacer { margin-inline-start: auto; }
+.stats__row .count { font-family: var(--font-mono); font-size: 0.74rem; color: var(--fg-dim); direction: ltr; }
+.stats__row button {
+  background: none; border: 0; color: var(--link); font: inherit; cursor: pointer; padding: 0;
+}
+.stats__row button:hover { text-decoration: underline; }
+
+/* --------------------------------------------------------------------------
+   Repair report
+   -------------------------------------------------------------------------- */
+
+.repair__row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 0.84rem;
+}
+.repair__row:last-child { border-bottom: 0; }
+.repair__row .count {
+  margin-inline-start: auto; font-family: var(--font-mono); font-size: 0.74rem;
+  color: var(--ok); direction: ltr;
+}

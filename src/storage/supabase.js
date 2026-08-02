@@ -24,10 +24,18 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /* --------------------------------------------------------------------------
-   Signing in
-   Email and a one-time code. Not a shared password: with one of those, the
-   "who saved this" column means nothing and you can never tell which of you
-   made a change.
+   Accounts
+
+   Two doors, because they are two different moments:
+
+     signUp    once, with a name. The name is what everyone else sees - an
+               email address in a "who has this open" badge tells you who it
+               is only if you already know their address.
+     signIn    every time after that.
+
+   A password rather than a code on every visit: signing in ten times a day
+   through an inbox is a tax, and the six-digit code stays available for the
+   times a password has been forgotten.
    -------------------------------------------------------------------------- */
 
 export async function currentUser() {
@@ -35,16 +43,60 @@ export async function currentUser() {
   return data.session ? data.session.user : null;
 }
 
-/** Sends the six-digit code. */
+/** The name to show. Falls back to the part of the address before the @. */
+export function displayName(user) {
+  if (!user) return '';
+  const meta = user.user_metadata || {};
+  return meta.display_name || meta.name || String(user.email || '').split('@')[0];
+}
+
+/**
+ * Creates an account. Supabase then emails a confirmation code.
+ *
+ * No emailRedirectTo, deliberately. With one, the confirmation email carries a
+ * link, and a link opened on a phone lands in whichever browser the mail app
+ * prefers - not the one holding the half-finished sign-up. A code is typed
+ * where the person already is.
+ */
+export async function signUp(email, password, name) {
+  const { data, error } = await supabase.auth.signUp({
+    email: String(email).trim(),
+    password,
+    options: { data: { display_name: String(name).trim() } },
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Confirms a new account with the code from the email. */
+export async function verifySignup(email, token) {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: String(email).trim(),
+    token: String(token).trim(),
+    type: 'signup',
+  });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function signInWithPassword(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: String(email).trim(),
+    password,
+  });
+  if (error) throw error;
+  return data.user;
+}
+
+/** The way back in when a password has been forgotten. */
 export async function requestCode(email) {
   const { error } = await supabase.auth.signInWithOtp({
     email: String(email).trim(),
-    options: { shouldCreateUser: true },
+    options: { shouldCreateUser: false },
   });
   if (error) throw error;
 }
 
-/** Exchanges the code for a session. */
 export async function verifyCode(email, token) {
   const { data, error } = await supabase.auth.verifyOtp({
     email: String(email).trim(),
@@ -53,6 +105,13 @@ export async function verifyCode(email, token) {
   });
   if (error) throw error;
   return data.user;
+}
+
+export async function updateName(name) {
+  const { error } = await supabase.auth.updateUser({
+    data: { display_name: String(name).trim() },
+  });
+  if (error) throw error;
 }
 
 export async function signOut() {
@@ -151,6 +210,59 @@ export async function writeDocument(path, content) {
 export async function deleteDocument(path) {
   const { error } = await supabase.from('documents').delete().eq('path', path);
   if (error) throw error;
+}
+
+/* --------------------------------------------------------------------------
+   Who is here
+
+   Realtime presence rather than a table: being online is not a fact worth
+   storing. It is true only while a browser is open, and a row saying someone
+   is here is a row that goes stale the moment their laptop lid closes.
+   Presence is held by the connection itself, so it cannot lie.
+   -------------------------------------------------------------------------- */
+
+let presenceChannel = null;
+
+/**
+ * Announces this person and reports everyone else.
+ * @param {object} me  { email, name }
+ * @param {(people: Array) => void} onChange
+ */
+export function joinPresence(me, onChange) {
+  if (presenceChannel) return presenceChannel;
+
+  presenceChannel = supabase.channel('studio-presence', {
+    config: { presence: { key: me.email } },
+  });
+
+  const report = () => {
+    const state = presenceChannel.presenceState();
+    const people = Object.values(state)
+      .flat()
+      .map((entry) => ({ email: entry.email, name: entry.name, at: entry.at }));
+
+    // One person, many tabs, one entry.
+    const unique = new Map(people.map((p) => [p.email, p]));
+    onChange([...unique.values()]);
+  };
+
+  presenceChannel
+    .on('presence', { event: 'sync' }, report)
+    .on('presence', { event: 'join' }, report)
+    .on('presence', { event: 'leave' }, report)
+    .subscribe(async (status) => {
+      if (status !== 'SUBSCRIBED') return;
+      await presenceChannel.track({ email: me.email, name: me.name, at: new Date().toISOString() });
+    });
+
+  return presenceChannel;
+}
+
+export async function leavePresence() {
+  if (!presenceChannel) return;
+  await presenceChannel.untrack();
+  await supabase.removeChannel(presenceChannel);
+  presenceChannel = null;
 }
 
 /** Suggests a workspace path for a file opened from disk. */

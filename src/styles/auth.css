@@ -1,47 +1,77 @@
 /* ==========================================================================
    styles/auth.css
-   The sign-in screen and the workspace browser.
+   The account dialog, the presence chips, and the workspace browser.
    ========================================================================== */
 
-.gate-screen {
-  position: fixed; inset: 0; z-index: 1000;
-  display: grid; place-items: center;
-  padding: 24px;
-  background: var(--bg);
+/* --------------------------------------------------------------------------
+   Account dialog
+   -------------------------------------------------------------------------- */
+
+.auth { padding-top: 4px; }
+
+.auth__tabs {
+  display: flex; gap: 4px; margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
 }
 
-.gate {
-  display: flex; flex-direction: column; align-items: center;
-  width: min(360px, 100%);
-  text-align: center;
+.auth__tab {
+  font-family: inherit; font-size: 0.86rem; color: var(--fg-dim);
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 9px 16px; cursor: pointer; margin-bottom: -1px;
+  transition: color var(--fast), border-color var(--fast);
+}
+.auth__tab:hover { color: var(--fg); }
+.auth__tab[aria-pressed='true'] {
+  color: var(--accent-strong); border-bottom-color: var(--accent); font-weight: 600;
 }
 
-.gate__mark { width: 92px; height: 92px; color: var(--fg); margin-bottom: 14px; }
-.gate__mark svg { width: 100%; height: 100%; display: block; }
+.auth__form { display: flex; flex-direction: column; gap: 2px; }
+.auth__submit { justify-content: center; min-height: 40px; margin-top: 6px; }
+.auth__link { align-self: center; font-size: 0.78rem; }
+.auth__error { font-size: 0.8rem; color: var(--err); line-height: 1.8; padding-top: 6px; }
 
-.gate__title {
-  font-size: 1.25rem; font-weight: 700; color: var(--fg);
-  padding-top: 14px; margin-bottom: 22px; position: relative;
-}
-.gate__title::before {
-  content: ''; position: absolute; top: 0; inset-inline-start: 50%;
-  transform: translateX(50%);
-  width: 42px; height: 1px; background: var(--line);
+.auth__code {
+  font-size: 1.15rem; letter-spacing: 0.35em; text-align: center;
+  font-family: var(--font-mono);
 }
 
-.gate__form { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+/* --------------------------------------------------------------------------
+   Account button in the status bar
+   -------------------------------------------------------------------------- */
 
-.gate__hint { font-size: 0.83rem; color: var(--fg-dim); line-height: 1.9; margin-bottom: 4px; }
-.gate__hint b { color: var(--fg); font-weight: 600; }
+.who {
+  font-size: 0.73rem; color: var(--fg-dim);
+  background: none; border: 1px solid var(--line); border-radius: 20px;
+  padding: 3px 11px; cursor: pointer; font-family: inherit;
+  transition: border-color var(--fast), color var(--fast);
+}
+.who:hover { border-color: var(--accent); color: var(--fg); }
+.who--in { border-color: transparent; color: var(--fg-dim); }
+.who--in:hover { border-color: var(--line); }
 
-.gate__submit { justify-content: center; min-height: 40px; }
+/* --------------------------------------------------------------------------
+   Who else is here
+   -------------------------------------------------------------------------- */
 
-.gate__code {
-  font-size: 1.3rem; letter-spacing: 0.4em; text-align: center;
-  font-family: var(--font-mono); padding: 10px;
+.presence { display: flex; align-items: center; gap: 8px; }
+
+.presence__who {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; color: var(--fg-dim);
+  padding: 3px 9px 3px 7px;
+  background: var(--panel-2); border-radius: 20px;
 }
 
-.gate__error { font-size: 0.8rem; color: var(--err); line-height: 1.8; }
+.presence__dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ok); flex-shrink: 0;
+  animation: presence-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes presence-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
 
 /* --------------------------------------------------------------------------
    Workspace browser
@@ -73,5 +103,5 @@
 
 .ws-empty { padding: 26px 8px; text-align: center; color: var(--fg-dim); font-size: 0.85rem; }
 
-/* The signed-in address, in the status bar. */
-.who { font-size: 0.72rem; color: var(--fg-faint); direction: ltr; unicode-bidi: isolate; }
+.auth__hint { font-size: 0.82rem; color: var(--fg-dim); line-height: 1.95; margin-bottom: 6px; }
+.auth__hint b { color: var(--fg); font-weight: 600; }

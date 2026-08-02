@@ -62,8 +62,12 @@ const ICONS = {
   open: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M9 13h6',
   cloud: 'M6 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.4A3.5 3.5 0 0 1 18.5 18z',
-  upload: 'M12 15V3M8 7l4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
+  /* Distinct from `publish`, which is an arrow out of a tray. This one is an
+     arrow into a cloud, because the two sat side by side and read as the same
+     picture. */
+  upload: 'M6 19a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.4A3.5 3.5 0 0 1 18.5 19M12 21v-9M9 15l3-3 3 3',
   signout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8',
   newdoc: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 12v6M9 15h6',
   close: 'M6 6l12 12M18 6L6 18',
@@ -248,8 +252,10 @@ export const COMMANDS = [
   { id: 'toolbar-config', menu: 'view', label: 'چیدمان نوار ابزار', icon: 'layout',
     separatorBefore: true, tip: 'انتخاب ابزارهای نوار',
     run: (ctx) => ctx.configureToolbar() },
+  { id: 'account', menu: 'file', label: 'حساب کاربری', icon: 'user',
+    separatorBefore: true, tip: 'ورود یا ثبت‌نام', run: (ctx) => ctx.openAccount() },
   { id: 'signout', menu: 'file', label: 'خروج از حساب', icon: 'signout',
-    separatorBefore: true, run: (ctx) => ctx.signOut() },
+    run: (ctx) => ctx.signOut() },
   { id: 'keys', menu: 'view', label: 'کلیدهای میان‌بر', icon: 'keys', separatorBefore: true,
     tip: 'کلیدهای میان‌بر (F1)', run: (ctx) => ctx.showShortcuts() },
 ];

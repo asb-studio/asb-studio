@@ -50,7 +50,7 @@ import * as shortcuts from './ui/shortcuts.js';
 import * as dialog from './ui/dialog.js';
 import * as files from './storage/files.js';
 import * as remote from './storage/supabase.js';
-import { AuthGate } from './ui/auth.js';
+import { openAuth } from './ui/auth.js';
 import { openWorkspace as showWorkspace, pushToWorkspace as sendToWorkspace } from './ui/workspace.js';
 import { LOCK_REFRESH_MS } from './storage/config.js';
 
@@ -102,7 +102,8 @@ const app = {
   menubar: null,
   toolbar: null,
   view: 'split',
-  user: null,       // the signed-in person
+  user: null,       // the signed-in person, or null
+  present: [],      // everyone else who is online right now
   lockTimer: null,  // keeps the workspace lock alive while a document is open
   switching: false,   // guards the editor's change event during a tab swap
   loadedId: null,     // the tab whose text is currently in the editor
@@ -880,7 +881,44 @@ const ctx = {
 
   /* --- the shared workspace --------------------------------------------- */
 
-  openWorkspace() {
+  async openAccount() {
+    if (app.user) {
+      const out = await dialog.ask('حساب کاربری',
+        `وارد شده‌ای با ${remote.displayName(app.user)} (${app.user.email}).`,
+        { confirmLabel: 'خروج از حساب', cancelLabel: 'بستن', danger: true });
+      if (out) ctx.signOut();
+      return;
+    }
+
+    const user = await openAuth();
+    if (!user) return;
+
+    app.user = user;
+    startPresence();
+    updateStatusBar();
+    toast(`خوش آمدی، ${remote.displayName(user)}`);
+  },
+
+  /** Everything shared needs a name on it, so it asks first. */
+  async requireAccount() {
+    if (app.user) return true;
+
+    const yes = await dialog.ask('برای این کار باید وارد شوی',
+      'فضای مشترک نیاز دارد بداند هر تغییر را چه کسی ذخیره کرده. ویرایش روی همین کامپیوتر بدون حساب هم کار می‌کند.',
+      { confirmLabel: 'ورود یا ثبت‌نام' });
+    if (!yes) return false;
+
+    const user = await openAuth();
+    if (!user) return false;
+
+    app.user = user;
+    startPresence();
+    updateStatusBar();
+    return true;
+  },
+
+  async openWorkspace() {
+    if (!(await ctx.requireAccount())) return;
     showWorkspace({
       currentEmail: app.user ? app.user.email : null,
       toast,
@@ -903,6 +941,7 @@ const ctx = {
   async pushToWorkspace() {
     const current = tab();
     if (!current) { toast('اول یک سند باز کن'); return; }
+    if (!(await ctx.requireAccount())) return;
 
     syncLoadedTab();
     normalizeFrontmatter(current.doc);
@@ -920,14 +959,16 @@ const ctx = {
   },
 
   async signOut() {
-    const yes = await dialog.ask('خروج از حساب',
-      'برای کار دوباره باید ایمیل و کد را از نو بزنی.',
-      { confirmLabel: 'خارج شو', danger: true });
-    if (!yes) return;
+    if (!app.user) { toast('وارد نشده‌ای'); return; }
 
     await releaseAllLocks();
+    await remote.leavePresence();
     await remote.signOut();
-    window.location.reload();
+
+    app.user = null;
+    app.present = [];
+    updateStatusBar();
+    toast('خارج شدی');
   },
 
   browseArchive() {
@@ -1274,15 +1315,25 @@ function closeIssues() {
    Boot
    -------------------------------------------------------------------------- */
 
-async function boot() {
+function boot() {
   initTheme();
   initTooltips();
 
-  // Nothing else runs until somebody is signed in. The workspace is the whole
-  // point of the studio being online, and it is useless without a name on it.
-  const gate = new AuthGate($('#gate'));
-  app.user = await gate.require();
-  remote.onAuthChange((user) => { app.user = user; updateStatusBar(); });
+  /* Signing in is optional. The studio saves to the local disk whether or not
+     anybody has an account; a login only buys the shared workspace. So the
+     app starts, and the session is picked up in the background if there is
+     one. */
+  remote.currentUser().then((user) => {
+    app.user = user;
+    if (user) startPresence();
+    updateStatusBar();
+  });
+
+  remote.onAuthChange((user) => {
+    app.user = user;
+    if (user) startPresence(); else remote.leavePresence();
+    updateStatusBar();
+  });
 
   app.editor = new MarkdownEditor($('#editor'), () => {
     if (app.switching) return;   // a tab swap is not an author's edit
@@ -1355,6 +1406,7 @@ async function boot() {
   /* --- status bar --- */
   $('#btn-stats').addEventListener('click', () => ctx.showStats());
   $('#btn-usage').addEventListener('click', showUsage);
+  $('#btn-account').addEventListener('click', () => ctx.openAccount());
   $('#btn-review').addEventListener('click', () => ctx.toggleReviewPanel());
   $('#btn-review-close').addEventListener('click', closeReview);
   $('#btn-review-accept-all').addEventListener('click', () => applyReviewAll('accept'));
@@ -1434,6 +1486,7 @@ async function boot() {
     syncLoadedTab();
     files.saveSession(app.session.snapshot());
     releaseAllLocks();
+    remote.leavePresence();
     if (!app.session.hasUnsaved) return;
     e.preventDefault();
     e.returnValue = '';

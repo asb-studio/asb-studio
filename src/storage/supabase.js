@@ -26,16 +26,14 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 /* --------------------------------------------------------------------------
    Accounts
 
-   Two doors, because they are two different moments:
+   ONE-TIME CODES ONLY. No password is chosen, stored, or asked for - a
+   password is a thing to forget, to reuse from somewhere else, and to have to
+   reset. An address and a name are all this needs, and the code proves the
+   address on the spot.
 
-     signUp    once, with a name. The name is what everyone else sees - an
-               email address in a "who has this open" badge tells you who it
-               is only if you already know their address.
-     signIn    every time after that.
-
-   A password rather than a code on every visit: signing in ten times a day
-   through an inbox is a tax, and the six-digit code stays available for the
-   times a password has been forgotten.
+   So there is really one flow, not two. Signing up is signing in for the
+   first time, with a name attached; every visit after that is the same
+   request without one.
    -------------------------------------------------------------------------- */
 
 export async function currentUser() {
@@ -51,52 +49,26 @@ export function displayName(user) {
 }
 
 /**
- * Creates an account. Supabase then emails a confirmation code.
+ * Sends the code.
  *
- * No emailRedirectTo, deliberately. With one, the confirmation email carries a
- * link, and a link opened on a phone lands in whichever browser the mail app
- * prefers - not the one holding the half-finished sign-up. A code is typed
- * where the person already is.
+ * @param {string} email
+ * @param {string|null} name  given on a first visit; the account is created
+ *                            with it. Absent on later visits, and Supabase
+ *                            then refuses unknown addresses - which is what
+ *                            keeps "sign in" from quietly creating accounts.
  */
-export async function signUp(email, password, name) {
-  const { data, error } = await supabase.auth.signUp({
-    email: String(email).trim(),
-    password,
-    options: { data: { display_name: String(name).trim() } },
-  });
-  if (error) throw error;
-  return data;
-}
+export async function requestCode(email, name = null) {
+  const options = { shouldCreateUser: Boolean(name) };
+  if (name) options.data = { display_name: String(name).trim() };
 
-/** Confirms a new account with the code from the email. */
-export async function verifySignup(email, token) {
-  const { data, error } = await supabase.auth.verifyOtp({
-    email: String(email).trim(),
-    token: String(token).trim(),
-    type: 'signup',
-  });
-  if (error) throw error;
-  return data.user;
-}
-
-export async function signInWithPassword(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: String(email).trim(),
-    password,
-  });
-  if (error) throw error;
-  return data.user;
-}
-
-/** The way back in when a password has been forgotten. */
-export async function requestCode(email) {
   const { error } = await supabase.auth.signInWithOtp({
     email: String(email).trim(),
-    options: { shouldCreateUser: false },
+    options,
   });
   if (error) throw error;
 }
 
+/** Exchanges the code for a session. */
 export async function verifyCode(email, token) {
   const { data, error } = await supabase.auth.verifyOtp({
     email: String(email).trim(),
@@ -112,14 +84,6 @@ export async function updateName(name) {
     data: { display_name: String(name).trim() },
   });
   if (error) throw error;
-}
-
-export async function signOut() {
-  await supabase.auth.signOut();
-}
-
-export function onAuthChange(fn) {
-  supabase.auth.onAuthStateChange((_event, session) => fn(session ? session.user : null));
 }
 
 /* --------------------------------------------------------------------------

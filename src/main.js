@@ -881,16 +881,16 @@ const ctx = {
 
   /* --- the shared workspace --------------------------------------------- */
 
-  async openAccount() {
+  async openAccount(mode = 'signin') {
     if (app.user) {
       const out = await dialog.ask('حساب کاربری',
-        `وارد شده‌ای با ${remote.displayName(app.user)} (${app.user.email}).`,
-        { confirmLabel: 'خروج از حساب', cancelLabel: 'بستن', danger: true });
+        `وارد شده‌ای با ${remote.displayName(app.user)} — ${app.user.email}`,
+        { confirmLabel: 'خروج', cancelLabel: 'بستن', danger: true });
       if (out) ctx.signOut();
       return;
     }
 
-    const user = await openAuth();
+    const user = await openAuth(mode);
     if (!user) return;
 
     app.user = user;
@@ -908,7 +908,7 @@ const ctx = {
       { confirmLabel: 'ورود یا ثبت‌نام' });
     if (!yes) return false;
 
-    const user = await openAuth();
+    const user = await openAuth('signin');
     if (!user) return false;
 
     app.user = user;
@@ -1406,7 +1406,13 @@ function boot() {
   /* --- status bar --- */
   $('#btn-stats').addEventListener('click', () => ctx.showStats());
   $('#btn-usage').addEventListener('click', showUsage);
-  $('#btn-account').addEventListener('click', () => ctx.openAccount());
+  // Two words, two doors: clicking the right half opens sign-in, the left
+  // half sign-up. Signed in, the whole thing is the account menu.
+  $('#btn-account').addEventListener('click', (event) => {
+    if (app.user) { ctx.openAccount(); return; }
+    const target = event.target.closest('[data-mode]');
+    ctx.openAccount(target ? target.dataset.mode : 'signin');
+  });
   $('#btn-review').addEventListener('click', () => ctx.toggleReviewPanel());
   $('#btn-review-close').addEventListener('click', closeReview);
   $('#btn-review-accept-all').addEventListener('click', () => applyReviewAll('accept'));

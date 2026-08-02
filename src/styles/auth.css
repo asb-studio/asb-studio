@@ -49,6 +49,11 @@
 .who--in { border-color: transparent; color: var(--fg-dim); }
 .who--in:hover { border-color: var(--line); }
 
+/* Each half is its own target, so the word you click is the door you get. */
+.who [data-mode] { padding: 0 2px; }
+.who [data-mode]:hover { color: var(--accent-strong); }
+.who__sep { color: var(--fg-faint); margin: 0 4px; }
+
 /* --------------------------------------------------------------------------
    Who else is here
    -------------------------------------------------------------------------- */

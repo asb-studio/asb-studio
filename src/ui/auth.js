@@ -1,58 +1,47 @@
 /* ==========================================================================
    ui/auth.js
    --------------------------------------------------------------------------
-   Signing in and signing up.
+   Signing in.
 
-   SIGNING IN IS OPTIONAL. The studio writes to the local disk and always has;
-   an account only buys the shared workspace. So the door is a dialog rather
-   than a wall - anybody can open the app, write, and save, and sign in when
-   they want to work with someone else. Locking the whole tool behind a login
-   would have been a barrier that bought nothing.
+   NO PASSWORDS. Nowhere. A password is a thing to choose badly, forget, reuse
+   from somewhere else, and eventually reset - and it buys nothing here, since
+   the address has to be proved by email either way. So the code IS the
+   sign-in, every time.
 
-   Three stages, because they are three different moments:
+   Which leaves one flow rather than two. The first visit asks for a name as
+   well, because a name is what the other person sees beside an open document;
+   every visit after that is the same request without one.
 
-     signin   email and password, every day
-     signup   once, with a name and a password. The emailed code only
-              confirms the address; the password is what is used from then on.
-     confirm  typing that code
-     code     the way back in when a password has been forgotten
+   SIGNING IN IS OPTIONAL. The studio saves to the local disk whether or not
+   anybody has an account. A login only buys the shared workspace, so this is
+   a dialog and not a wall.
    ========================================================================== */
 
-import {
-  signUp, signInWithPassword, requestCode, verifyCode, verifySignup, signOut,
-} from '../storage/supabase.js';
+import { requestCode, verifyCode, signOut } from '../storage/supabase.js';
 import * as dialog from './dialog.js';
 
 const LAST_EMAIL = 'asb-studio:last-email';
 
 /**
- * Opens the sign-in dialog.
+ * Opens the account dialog.
+ * @param {'signin'|'signup'} startMode
  * @returns {Promise<object|null>} the user, or null if dismissed
  */
-export function openAuth(startStage = 'signin') {
+export function openAuth(startMode = 'signin') {
   return new Promise((resolve) => {
     const root = document.createElement('div');
     root.className = 'auth';
 
-    let stage = startStage;
-    let pendingPassword = '';   // held across the confirm step, never stored
+    let mode = startMode;     // signin | signup
+    let sent = false;         // the code is out; show the code field
     let email = '';
+    let name = '';
+
     try { email = localStorage.getItem(LAST_EMAIL) || ''; } catch { /* private mode */ }
 
     const done = (user) => { dialog.close(); resolve(user); };
 
-    const render = () => {
-      root.innerHTML = '';
-      root.appendChild(tabs());
-      root.appendChild(
-        stage === 'signup' ? signUpForm()
-        : stage === 'confirm' ? confirmForm()
-        : stage === 'code' ? codeForm()
-        : signInForm()
-      );
-    };
-
-    /* --- the two doors, as a pair of tabs --- */
+    /* --- the two doors ---------------------------------------------------- */
     function tabs() {
       const bar = document.createElement('div');
       bar.className = 'auth__tabs';
@@ -62,11 +51,13 @@ export function openAuth(startStage = 'signin') {
         button.type = 'button';
         button.className = 'auth__tab';
         button.textContent = label;
-        const active = id === 'signup'
-          ? (stage === 'signup' || stage === 'confirm')
-          : (stage === 'signin' || stage === 'code');
-        button.setAttribute('aria-pressed', String(active));
-        button.addEventListener('click', () => { stage = id; render(); });
+        button.setAttribute('aria-pressed', String(mode === id));
+        button.addEventListener('click', () => {
+          if (mode === id) return;
+          mode = id;
+          sent = false;       // a code sent for one door is not valid at the other
+          render();
+        });
         bar.appendChild(button);
       }
       return bar;
@@ -87,179 +78,101 @@ export function openAuth(startStage = 'signin') {
       return wrap;
     }
 
-    function input(type, placeholder, value = '', ltr = true) {
-      const el = document.createElement('input');
-      el.type = type;
-      el.className = 'control' + (ltr ? ' control--ltr' : '');
-      el.placeholder = placeholder;
-      el.value = value;
-      return el;
-    }
+    function render() {
+      root.innerHTML = '';
+      root.appendChild(tabs());
 
-    function errorBox() {
-      const el = document.createElement('p');
-      el.className = 'auth__error';
-      el.hidden = true;
-      return el;
-    }
-
-    function submitButton(text) {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'btn btn--primary auth__submit';
-      el.textContent = text;
-      return el;
-    }
-
-    /* --- sign in ------------------------------------------------------- */
-    function signInForm() {
       const form = document.createElement('div');
       form.className = 'auth__form';
 
-      const mail = input('email', 'you@example.com', email);
+      /* --- name, first visit only --- */
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'control';
+      nameInput.placeholder = 'امیرمحمد شیرازیان';
+      nameInput.autocomplete = 'name';
+      nameInput.value = name;
+
+      const nameField = field('نام', nameInput, 'همین نام را بقیه کنار سندهای باز می‌بینند.');
+      if (mode === 'signup') form.appendChild(nameField);
+
+      /* --- address --- */
+      const mail = document.createElement('input');
+      mail.type = 'email';
+      mail.className = 'control control--ltr';
+      mail.placeholder = 'you@example.com';
       mail.autocomplete = 'email';
+      mail.value = email;
+      mail.disabled = sent;
 
-      const pass = input('password', '••••••••');
-      pass.autocomplete = 'current-password';
+      form.appendChild(field('ایمیل', mail));
 
-      const error = errorBox();
-      const button = submitButton('ورود');
+      /* --- code, once it has been sent --- */
+      const code = document.createElement('input');
+      code.type = 'text';
+      code.className = 'control control--ltr auth__code';
+      code.placeholder = '۱۲۳۴۵۶';
+      code.inputMode = 'numeric';
+      code.autocomplete = 'one-time-code';
+      code.maxLength = 8;
 
-      const forgot = document.createElement('button');
-      forgot.type = 'button';
-      forgot.className = 'btn btn--quiet auth__link';
-      forgot.textContent = 'رمز را فراموش کرده‌ام';
-      forgot.addEventListener('click', () => { stage = 'code'; render(); });
+      if (sent) {
+        const hint = document.createElement('p');
+        hint.className = 'auth__hint';
+        hint.innerHTML = `کدی به <b class="mono">${email}</b> فرستادیم. پوشه‌ی اسپم را هم نگاه کن.`;
+        form.appendChild(hint);
+        form.appendChild(field('کد', code));
+      }
 
-      const go = async () => {
-        if (!mail.value.includes('@') || !pass.value) {
-          error.textContent = 'ایمیل و رمز را کامل بنویس.';
-          error.hidden = false;
-          return;
-        }
+      const error = document.createElement('p');
+      error.className = 'auth__error';
+      error.hidden = true;
 
-        button.disabled = true;
-        button.textContent = 'در حال ورود…';
-        error.hidden = true;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn--primary auth__submit';
+      button.textContent = sent ? 'ورود' : (mode === 'signup' ? 'فرستادن کد' : 'فرستادن کد');
 
-        try {
-          const user = await signInWithPassword(mail.value, pass.value);
-          remember(mail.value);
-          done(user);
-        } catch (err) {
-          error.textContent = friendly(err);
-          error.hidden = false;
-          button.disabled = false;
-          button.textContent = 'ورود';
-        }
+      const fail = (message) => {
+        error.textContent = message;
+        error.hidden = false;
+        button.disabled = false;
       };
 
-      button.addEventListener('click', go);
-      pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-
-      form.append(
-        field('ایمیل', mail),
-        field('رمز', pass),
-        button, forgot, error);
-      return form;
-    }
-
-    /* --- sign up -------------------------------------------------------- */
-    function signUpForm() {
-      const form = document.createElement('div');
-      form.className = 'auth__form';
-
-      const name = input('text', 'امیرمحمد شیرازیان', '', false);
-      name.autocomplete = 'name';
-
-      const mail = input('email', 'you@example.com', email);
-      mail.autocomplete = 'email';
-
-      const pass = input('password', 'دست‌کم ۸ نویسه');
-      pass.autocomplete = 'new-password';
-
-      const error = errorBox();
-      const button = submitButton('ساختن حساب');
-
-      const go = async () => {
-        if (!name.value.trim()) {
-          error.textContent = 'نامت را بنویس — همین را بقیه می‌بینند.';
-          error.hidden = false;
+      const send = async () => {
+        if (mode === 'signup' && !nameInput.value.trim()) {
+          fail('نامت را بنویس — همین را بقیه می‌بینند.');
           return;
         }
         if (!mail.value.includes('@')) {
-          error.textContent = 'ایمیل درست نیست.';
-          error.hidden = false;
-          return;
-        }
-        if (pass.value.length < 8) {
-          error.textContent = 'رمز باید دست‌کم ۸ نویسه باشد.';
-          error.hidden = false;
+          fail('ایمیل درست نیست.');
           return;
         }
 
         button.disabled = true;
-        button.textContent = 'در حال ساختن…';
+        button.textContent = 'در حال فرستادن…';
         error.hidden = true;
 
         try {
-          await signUp(mail.value, pass.value, name.value);
-          remember(mail.value);
+          email = mail.value.trim();
+          name = nameInput.value.trim();
 
-          email = mail.value;
-          pendingPassword = pass.value;
-          stage = 'confirm';
+          // A name is passed only when signing up, and that is what allows the
+          // account to be created. Without one, an unknown address is refused.
+          await requestCode(email, mode === 'signup' ? name : null);
+
+          try { localStorage.setItem(LAST_EMAIL, email); } catch { /* private mode */ }
+          sent = true;
           render();
         } catch (err) {
-          error.textContent = friendly(err);
-          error.hidden = false;
-          button.disabled = false;
-          button.textContent = 'ساختن حساب';
+          button.textContent = 'فرستادن کد';
+          fail(friendly(err, mode));
         }
       };
 
-      button.addEventListener('click', go);
-      pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-
-      form.append(
-        field('نام', name, 'همین نام را بقیه کنار سندهای باز می‌بینند.'),
-        field('ایمیل', mail),
-        field('رمز', pass),
-        button, error);
-      return form;
-    }
-
-    /* --- confirming a new account ---------------------------------------
-       The code only proves the address is real. The password chosen a moment
-       ago is what signs them in from here on, so it is used to complete the
-       session rather than making them type it again. */
-    function confirmForm() {
-      const form = document.createElement('div');
-      form.className = 'auth__form';
-
-      const hint = document.createElement('p');
-      hint.className = 'auth__hint';
-      hint.innerHTML = `کدی به <b class="mono">${email}</b> فرستادیم. پوشه‌ی اسپم را هم نگاه کن.`;
-
-      const code = input('text', '۱۲۳۴۵۶');
-      code.maxLength = 8;
-      code.inputMode = 'numeric';
-      code.autocomplete = 'one-time-code';
-      code.classList.add('auth__code');
-
-      const error = errorBox();
-      const button = submitButton('تأیید و ورود');
-
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.className = 'btn btn--quiet auth__link';
-      back.textContent = 'ایمیل دیگری';
-      back.addEventListener('click', () => { stage = 'signup'; render(); });
-
-      const go = async () => {
+      const verify = async () => {
         if (code.value.trim().length < 6) {
-          error.textContent = 'کد را کامل بنویس.';
-          error.hidden = false;
+          fail('کد را کامل بنویس.');
           return;
         }
 
@@ -268,95 +181,34 @@ export function openAuth(startStage = 'signin') {
         error.hidden = true;
 
         try {
-          const user = await verifySignup(email, code.value);
-          done(user);
+          done(await verifyCode(email, code.value));
         } catch (err) {
-          // Some projects confirm on sign-up and reject the code as already
-          // used. The password still works, so try that before giving up.
-          if (pendingPassword) {
-            try {
-              const user = await signInWithPassword(email, pendingPassword);
-              done(user);
-              return;
-            } catch { /* fall through to the real message */ }
-          }
-
-          error.textContent = friendly(err);
-          error.hidden = false;
-          button.disabled = false;
-          button.textContent = 'تأیید و ورود';
+          button.textContent = 'ورود';
+          fail(friendly(err, mode));
           code.select();
         }
       };
 
-      button.addEventListener('click', go);
-      code.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      button.addEventListener('click', () => (sent ? verify() : send()));
+      mail.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !sent) send(); });
+      code.addEventListener('keydown', (e) => { if (e.key === 'Enter') verify(); });
 
-      form.append(hint, field('کد تأیید', code), button, back, error);
-      return form;
-    }
+      form.appendChild(button);
 
-    /* --- one-time code -------------------------------------------------- */
-    function codeForm() {
-      const form = document.createElement('div');
-      form.className = 'auth__form';
+      if (sent) {
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'btn btn--quiet auth__link';
+        again.textContent = 'ایمیل دیگری';
+        again.addEventListener('click', () => { sent = false; render(); });
+        form.appendChild(again);
+      }
 
-      const mail = input('email', 'you@example.com', email);
-      const code = input('text', '۱۲۳۴۵۶');
-      code.maxLength = 8;
-      code.classList.add('auth__code');
+      form.appendChild(error);
+      root.appendChild(form);
 
-      const codeField = field('کد', code, 'کد را از ایمیل بردار و اینجا بنویس.');
-      codeField.hidden = true;
-
-      const error = errorBox();
-      const button = submitButton('فرستادن کد');
-
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.className = 'btn btn--quiet auth__link';
-      back.textContent = 'ورود با رمز';
-      back.addEventListener('click', () => { stage = 'signin'; render(); });
-
-      let sent = false;
-
-      const go = async () => {
-        button.disabled = true;
-        error.hidden = true;
-
-        try {
-          if (!sent) {
-            button.textContent = 'در حال فرستادن…';
-            await requestCode(mail.value);
-            remember(mail.value);
-            sent = true;
-            codeField.hidden = false;
-            button.textContent = 'ورود';
-            button.disabled = false;
-            code.focus();
-            return;
-          }
-
-          button.textContent = 'در حال بررسی…';
-          const user = await verifyCode(mail.value, code.value);
-          done(user);
-        } catch (err) {
-          error.textContent = friendly(err);
-          error.hidden = false;
-          button.disabled = false;
-          button.textContent = sent ? 'ورود' : 'فرستادن کد';
-        }
-      };
-
-      button.addEventListener('click', go);
-      code.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-
-      form.append(field('ایمیل', mail), codeField, button, back, error);
-      return form;
-    }
-
-    function remember(value) {
-      try { localStorage.setItem(LAST_EMAIL, value.trim()); } catch { /* private mode */ }
+      const focusOn = sent ? code : (mode === 'signup' && !nameInput.value ? nameInput : mail);
+      requestAnimationFrame(() => focusOn.focus());
     }
 
     render();
@@ -369,17 +221,20 @@ export function openAuth(startStage = 'signin') {
 }
 
 /* Supabase answers in English and in error codes. Neither helps here. */
-function friendly(err) {
+function friendly(err, mode) {
   const message = String((err && err.message) || err || '');
 
-  if (/invalid login credentials/i.test(message)) return 'ایمیل یا رمز درست نیست.';
-  if (/email not confirmed/i.test(message)) return 'اول ایمیل تأیید را باز کن.';
-  if (/already registered|already exists/i.test(message)) return 'این ایمیل از قبل حساب دارد. از «ورود» استفاده کن.';
-  if (/rate|too many/i.test(message)) return 'تعداد تلاش زیاد شد. چند دقیقه صبر کن.';
+  if (/signups? not allowed|user not found/i.test(message)) {
+    return mode === 'signin'
+      ? 'این ایمیل حساب ندارد. از «ثبت‌نام» شروع کن.'
+      : 'ثبت‌نام تازه بسته است.';
+  }
+  if (/already registered|already exists/i.test(message)) {
+    return 'این ایمیل از قبل حساب دارد. از «ورود» استفاده کن.';
+  }
+  if (/rate|too many|security purposes/i.test(message)) return 'تعداد تلاش زیاد شد. یک دقیقه صبر کن.';
   if (/expired/i.test(message)) return 'کد منقضی شده. دوباره بخواه.';
   if (/invalid|incorrect|token/i.test(message)) return 'کد درست نیست.';
-  if (/signups? not allowed/i.test(message)) return 'ثبت‌نام تازه بسته است.';
-  if (/password/i.test(message)) return 'رمز باید دست‌کم ۸ نویسه باشد.';
   if (/network|fetch|failed/i.test(message)) return 'اتصال برقرار نشد. اینترنت را چک کن.';
 
   return 'مشکلی پیش آمد. دوباره امتحان کن.';

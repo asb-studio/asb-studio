@@ -49,6 +49,10 @@ import { buildEpub } from './export/epub.js';
 import * as shortcuts from './ui/shortcuts.js';
 import * as dialog from './ui/dialog.js';
 import * as files from './storage/files.js';
+import * as remote from './storage/supabase.js';
+import { AuthGate } from './ui/auth.js';
+import { openWorkspace as showWorkspace, pushToWorkspace as sendToWorkspace } from './ui/workspace.js';
+import { LOCK_REFRESH_MS } from './storage/config.js';
 
 /* --------------------------------------------------------------------------
    Helpers
@@ -98,6 +102,8 @@ const app = {
   menubar: null,
   toolbar: null,
   view: 'split',
+  user: null,       // the signed-in person
+  lockTimer: null,  // keeps the workspace lock alive while a document is open
   switching: false,   // guards the editor's change event during a tab swap
   loadedId: null,     // the tab whose text is currently in the editor
 };
@@ -385,7 +391,35 @@ function activate(id) {
 
   app.tabs.render(app.session);
   refresh();
+  updateStatusBar();
   app.editor.focus();
+}
+
+/* --------------------------------------------------------------------------
+   Keeping a workspace lock alive
+
+   A lock lapses after thirty minutes so a closed laptop cannot block the
+   other person forever. While a document is genuinely open, it is renewed -
+   otherwise a long editing session would expire under the author.
+   -------------------------------------------------------------------------- */
+
+function startLockRefresh() {
+  if (app.lockTimer) return;
+
+  app.lockTimer = setInterval(async () => {
+    for (const t of app.session.tabs) {
+      if (!t.remotePath || t.readOnly) continue;
+      try { await remote.claimDocument(t.remotePath); } catch { /* lost it; the save will say so */ }
+    }
+  }, LOCK_REFRESH_MS);
+}
+
+/** Hands back every lock this browser holds. */
+async function releaseAllLocks() {
+  for (const t of app.session.tabs) {
+    if (!t.remotePath || t.readOnly) continue;
+    try { await remote.releaseDocument(t.remotePath); } catch { /* best effort */ }
+  }
 }
 
 /** Pushes the editor's text into the tab it belongs to. Call before anything
@@ -441,6 +475,12 @@ async function closeTab(id) {
       `«${target.name}» تغییرهای ذخیره‌نشده دارد. اگر ببندی از بین می‌روند.`,
       { confirmLabel: 'ببند و بی‌خیال شو', cancelLabel: 'برگرد', danger: true });
     if (!keep) return;
+  }
+
+  // Hand the lock back, so the other person is not left waiting on a tab
+  // that is not even open any more.
+  if (target.remotePath && !target.readOnly) {
+    remote.releaseDocument(target.remotePath).catch(() => {});
   }
 
   const wasActive = app.session.activeId === id;
@@ -838,6 +878,58 @@ const ctx = {
     toast('شناسنامه مرتب شد');
   },
 
+  /* --- the shared workspace --------------------------------------------- */
+
+  openWorkspace() {
+    showWorkspace({
+      currentEmail: app.user ? app.user.email : null,
+      toast,
+      openDocument: ({ path, content, readOnly }) => {
+        const existing = app.session.tabs.find((t) => t.remotePath === path);
+        if (existing) { activate(existing.id); return; }
+
+        const name = path.split('/').pop();
+        const created = app.session.open(name, content, null);
+        created.remotePath = path;
+        created.readOnly = readOnly;
+        activate(created.id);
+        startLockRefresh();
+
+        toast(readOnly ? `${name} — فقط خواندنی` : `${name} باز شد`);
+      },
+    });
+  },
+
+  async pushToWorkspace() {
+    const current = tab();
+    if (!current) { toast('اول یک سند باز کن'); return; }
+
+    syncLoadedTab();
+    normalizeFrontmatter(current.doc);
+
+    const path = await sendToWorkspace(
+      current.doc, current.name, current.doc.serialize(), { toast });
+
+    if (!path) return;
+
+    current.remotePath = path;
+    current.readOnly = false;
+    markDirty(false);
+    startLockRefresh();
+    updateStatusBar();
+  },
+
+  async signOut() {
+    const yes = await dialog.ask('خروج از حساب',
+      'برای کار دوباره باید ایمیل و کد را از نو بزنی.',
+      { confirmLabel: 'خارج شو', danger: true });
+    if (!yes) return;
+
+    await releaseAllLocks();
+    await remote.signOut();
+    window.location.reload();
+  },
+
   browseArchive() {
     openArchive({
       openFile: ({ name, text, handle }) => {
@@ -960,11 +1052,33 @@ async function doSave() {
   const current = tab();
   if (!current) return false;
 
+  if (current.readOnly) {
+    dialog.say('فقط خواندنی',
+      'این سند دست کس دیگری باز است. تا رهایش نکرده نمی‌شود ذخیره‌اش کرد.');
+    return false;
+  }
+
   syncLoadedTab();
   // Every saved file carries the same keys in the same order. The first save
   // of an older file therefore reorders its frontmatter, which is the point.
   normalizeFrontmatter(current.doc);
   const text = current.doc.serialize();
+
+  // A tab from the workspace saves there, not to disk. The two are never
+  // both true, so there is no question of which one wins.
+  if (current.remotePath) {
+    try {
+      await remote.writeDocument(current.remotePath, text);
+      markDirty(false);
+      app.sidebar.render(current.doc);
+      app.usage.noteSave(current.name);
+      toast('در فضای مشترک ذخیره شد');
+      return true;
+    } catch (err) {
+      dialog.say('ذخیره نشد', String(err.message || err));
+      return false;
+    }
+  }
 
   try {
     if (current.handle && (await files.saveToHandle(current.handle, text))) {
@@ -1160,9 +1274,15 @@ function closeIssues() {
    Boot
    -------------------------------------------------------------------------- */
 
-function boot() {
+async function boot() {
   initTheme();
   initTooltips();
+
+  // Nothing else runs until somebody is signed in. The workspace is the whole
+  // point of the studio being online, and it is useless without a name on it.
+  const gate = new AuthGate($('#gate'));
+  app.user = await gate.require();
+  remote.onAuthChange((user) => { app.user = user; updateStatusBar(); });
 
   app.editor = new MarkdownEditor($('#editor'), () => {
     if (app.switching) return;   // a tab swap is not an author's edit
@@ -1313,6 +1433,7 @@ function boot() {
   window.addEventListener('beforeunload', (e) => {
     syncLoadedTab();
     files.saveSession(app.session.snapshot());
+    releaseAllLocks();
     if (!app.session.hasUnsaved) return;
     e.preventDefault();
     e.returnValue = '';
@@ -1332,6 +1453,7 @@ function boot() {
   }).then(() => {
     if (app.session.count === 0) app.session.openBlank();
     activate(app.session.activeId);
+    updateStatusBar();
   });
 }
 

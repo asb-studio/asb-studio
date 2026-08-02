@@ -1,7 +1,9 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "headers": [
     {
+      "//": "The app is never cached. A stale main.js after a push is the worst failure mode there is: one person sees the new studio, the other sees the old one, and neither can tell why.",
       "source": "/(index.html)?",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
     },
@@ -14,6 +16,7 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, must-revalidate" }]
     },
     {
+      "//": "Bundled libraries and the house font change only when replaced by hand, so they cache hard.",
       "source": "/vendor/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
     },
@@ -22,6 +25,7 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }]
     },
     {
+      "//": "A private tool. Nothing here should appear in a search result or be embeddable elsewhere.",
       "source": "/(.*)",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" },

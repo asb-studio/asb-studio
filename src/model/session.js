@@ -28,6 +28,12 @@ export class Tab {
     this.dirty = false;
     this.caret = 0;      // character offset, restored on return
     this.scroll = 0;     // preview scroll position
+
+    /* --- shared workspace -----------------------------------------------
+       A tab is either local (a file handle) or shared (a workspace path).
+       Never both: saving has to know which place it is writing to.        */
+    this.remotePath = null;   // path in the workspace, when it came from there
+    this.readOnly = false;    // true when somebody else holds the lock
   }
 
   /** The body as it stands, ready for the editor. */

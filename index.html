@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="src/styles/panel.css">
   <link rel="stylesheet" href="src/styles/tabs.css">
   <link rel="stylesheet" href="src/styles/menubar.css">
+  <link rel="stylesheet" href="src/styles/auth.css">
   <link rel="stylesheet" href="src/styles/preview.css">
   <link rel="stylesheet" href="src/styles/dialog.css">
 
@@ -169,6 +170,7 @@
     </div>
 
     <footer class="statusbar">
+      <span id="who" class="who"></span>
       <span id="wordcount">۰ کلمه</span>
       <span id="cursor">خط ۱ از ۱ · ستون ۱</span>
       <span id="ids-status" class="status--ok">همه‌ی پاراگراف‌ها شناسه دارند</span>
@@ -205,6 +207,9 @@
       <button class="btn btn--primary" id="btn-panel-save">ذخیره و بستن</button>
     </footer>
   </aside>
+
+  <!-- Covers everything until somebody is signed in. -->
+  <div class="gate-screen" id="gate" hidden></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

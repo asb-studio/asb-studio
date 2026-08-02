@@ -121,6 +121,32 @@ export const FIXES = [
 ];
 
 /**
+ * Applies one fix, at one line. Used by the button on a row in the issues
+ * drawer, so a single mistake can be corrected without running the whole
+ * repair over the document.
+ *
+ * @returns {{ body: string, changed: boolean }}
+ */
+export function repairOne(body, rule, line) {
+  const fix = FIXES.find((f) => f.rule === rule);
+  if (!fix) return { body, changed: false };
+
+  const lines = body.split('\n');
+  const index = line - 1;
+
+  // Each fix rewrites whole lines, so the one line is handed to it as its own
+  // little document. heading-attr-own-line needs the heading above it too.
+  const from = rule === 'heading-attr-own-line' ? Math.max(0, index - 1) : index;
+  const slice = lines.slice(from, index + 1);
+
+  const count = fix.apply(slice, new Set());
+  if (count === 0) return { body, changed: false };
+
+  lines.splice(from, index - from + 1, ...slice);
+  return { body: lines.join('\n'), changed: true };
+}
+
+/**
  * Applies every automatic fix to a body.
  * @param {string} body
  * @param {string[]} only  optional list of rule ids to limit the run to

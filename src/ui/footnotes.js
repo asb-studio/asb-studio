@@ -14,6 +14,7 @@
    ========================================================================== */
 
 import { readFootnotes, setFootnoteText, removeFootnote, renumberFootnotes } from '../model/footnotes.js';
+import { attachRichControls } from './rich-field.js';
 
 const fa = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
 
@@ -112,6 +113,10 @@ export class FootnotePanel {
       if (event.key === 'Escape') { field.value = note.text; field.blur(); }
     });
 
+    // Footnotes are full of italic book titles and bold names, so the field
+    // gets the same formatting shortcuts the main editor has.
+    const controls = attachRichControls(field);
+
     const where = document.createElement('span');
     where.className = 'fn-where';
     where.textContent = note.refLine ? `خط ${fa(note.refLine)}` : 'بدون ارجاع';
@@ -131,7 +136,11 @@ export class FootnotePanel {
       this.render();
     });
 
-    row.append(number, field, where, remove);
+    const middle = document.createElement('div');
+    middle.className = 'fn-field';
+    middle.append(field, controls);
+
+    row.append(number, middle, where, remove);
     return row;
   }
 

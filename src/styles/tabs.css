@@ -132,6 +132,24 @@
 .fn-remove:hover { background: var(--line); color: var(--err); }
 .fn-remove svg { width: 15px; height: 15px; }
 
+/* --------------------------------------------------------------------------
+   Formatting controls inside a small field
+   -------------------------------------------------------------------------- */
+
+.fn-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.rich-bar { display: flex; gap: 2px; }
+
+.rich-bar__btn {
+  width: 26px; height: 22px;
+  display: grid; place-items: center;
+  font-family: inherit; font-size: 0.76rem; font-weight: 700;
+  color: var(--fg-faint); background: none;
+  border: 1px solid transparent; border-radius: 4px; cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+.rich-bar__btn:hover { background: var(--panel-2); color: var(--fg); border-color: var(--line); }
+
 .fn-warn {
   font-size: 0.79rem; line-height: 1.85; color: var(--warn);
   padding: 8px 10px; margin-bottom: 6px;

@@ -94,8 +94,8 @@
   --warn: #8d6208;
 
   --line-active: rgba(90, 78, 50, 0.045);
-  --selection: rgba(90, 82, 66, 0.16);
-  --selection-match: rgba(90, 82, 66, 0.09);
+  --selection: rgba(51, 122, 183, 0.26);
+  --selection-match: rgba(51, 122, 183, 0.12);
   --match: rgba(90, 82, 66, 0.16);
   --match-active: rgba(200, 145, 0, 0.34);
   --trailing-space: rgba(160, 140, 90, 0.45);
@@ -126,8 +126,8 @@
   --warn: #8f6404;
 
   --line-active: rgba(0, 0, 0, 0.025);
-  --selection: rgba(60, 62, 68, 0.15);
-  --selection-match: rgba(60, 62, 68, 0.08);
+  --selection: rgba(51, 122, 183, 0.25);
+  --selection-match: rgba(51, 122, 183, 0.11);
   --match: rgba(60, 62, 68, 0.15);
   --match-active: rgba(212, 154, 0, 0.32);
   --trailing-space: rgba(130, 130, 140, 0.5);
@@ -158,8 +158,8 @@
   --warn: #dcae2b;
 
   --line-active: rgba(255, 255, 255, 0.03);
-  --selection: rgba(215, 218, 226, 0.16);
-  --selection-match: rgba(215, 218, 226, 0.08);
+  --selection: rgba(84, 152, 209, 0.34);
+  --selection-match: rgba(84, 152, 209, 0.15);
   --match: rgba(215, 218, 226, 0.16);
   --match-active: rgba(220, 168, 15, 0.34);
   --trailing-space: rgba(180, 185, 195, 0.4);
@@ -190,8 +190,8 @@
   --warn: #d4a017;
 
   --line-active: rgba(255, 255, 255, 0.025);
-  --selection: rgba(226, 224, 216, 0.15);
-  --selection-match: rgba(226, 224, 216, 0.07);
+  --selection: rgba(84, 152, 209, 0.34);
+  --selection-match: rgba(84, 152, 209, 0.15);
   --match: rgba(226, 224, 216, 0.15);
   --match-active: rgba(212, 154, 0, 0.34);
   --trailing-space: rgba(170, 165, 155, 0.4);

@@ -29,13 +29,14 @@ import { readFootnotes, nextFootnoteId } from './model/footnotes.js';
 import { UsageTracker } from './model/usage.js';
 import { renderPreview } from './markdown/preview.js';
 import { lintDocument, SEVERITY } from './markdown/lint.js';
-import { repairBody, previewRepair } from './markdown/repair.js';
+import { repairBody, repairOne, previewRepair } from './markdown/repair.js';
 import { findChanges, resolveOne, resolveAll, countChanges } from './markdown/critic.js';
 import { migrateBody, findRemainingHtml } from './markdown/migrate.js';
 import { MarkdownEditor } from './editor/editor.js';
 import { Sidebar } from './ui/sidebar.js';
 import { Tabs } from './ui/tabs.js';
 import { FootnotePanel } from './ui/footnotes.js';
+import { SourcePanel } from './ui/sources.js';
 import { Toolbar, bindShortcuts } from './ui/toolbar.js';
 import { MenuBar } from './ui/menubar.js';
 import { initTheme, nextTheme, setTheme, getTheme, getThemeLabel } from './ui/theme.js';
@@ -92,6 +93,7 @@ const app = {
   sidebar: null,
   tabs: null,
   footnotes: null,
+  sources: null,
   usage: new UsageTracker(),
   menubar: null,
   toolbar: null,
@@ -126,6 +128,7 @@ function refresh() {
   renderIssues(current ? lintDocument(current.doc) : []);
   renderReadiness();
   if (app.footnotes) app.footnotes.render();
+  if (app.sources) app.sources.render();
   renderReview();
 
   const tracked = countChanges(body);
@@ -221,10 +224,56 @@ function issueRow(issue) {
     row.appendChild(code);
   }
 
+  /* A fix the studio can apply gets a button. Telling someone what is wrong
+     and then making them go and do it by hand is only half an answer. */
+  if (issue.fixable) {
+    const actions = document.createElement('div');
+    actions.className = 'issue__actions';
+
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'btn btn--primary';
+    apply.textContent = 'اصلاح کن';
+    apply.addEventListener('click', (event) => {
+      event.stopPropagation();
+      applyOneFix(issue);
+    });
+
+    actions.appendChild(apply);
+    row.appendChild(actions);
+  }
+
   if (issue.line) {
     row.addEventListener('click', () => { app.editor.goToLine(issue.line); closeIssues(); });
   }
   return row;
+}
+
+/** Corrects one reported mistake, in place. Ctrl+Z takes it back. */
+function applyOneFix(issue) {
+  const current = tab();
+  if (!current) return;
+
+  // Frontmatter typed into the text is not a line-level mistake; it is handled
+  // by lifting the whole block.
+  if (issue.rule === 'frontmatter-in-body') {
+    syncLoadedTab();
+    const { moved, fields } = liftEmbeddedFrontmatter(current.doc);
+    app.editor.setText(current.doc.body);
+    app.sidebar.render(current.doc);
+    markDirty(true);
+    refresh();
+    toast(moved ? `فرانت‌متر به شناسنامه منتقل شد (${fa(fields)} فیلد)` : 'فرانت‌متر تکراری برداشته شد');
+    return;
+  }
+
+  const { body, changed } = repairOne(app.editor.getText(), issue.rule, issue.line);
+  if (!changed) { toast('این مورد را نشد خودکار اصلاح کرد'); return; }
+
+  app.editor.setText(body);
+  markDirty(true);
+  refresh();
+  toast('اصلاح شد');
 }
 
 /* --------------------------------------------------------------------------
@@ -455,10 +504,16 @@ const ctx = {
   },
 
   toggleFootnotePanel() {
-    // Both drawers live along the same strip, so only one can be up.
-    if (!app.footnotes.isOpen) closeIssues();
+    // Every drawer lives along the same strip, so only one can be up.
+    if (!app.footnotes.isOpen) closeOtherDrawers('footnotes');
     app.footnotes.toggle();
     $('#btn-footnotes').setAttribute('aria-pressed', String(app.footnotes.isOpen));
+  },
+
+  toggleSourcePanel() {
+    if (!app.sources.isOpen) closeOtherDrawers('sources');
+    app.sources.toggle();
+    $('#btn-sources').setAttribute('aria-pressed', String(app.sources.isOpen));
   },
 
   buildTableOfContents() {
@@ -1055,8 +1110,7 @@ async function applyReviewAll(action) {
 }
 
 function openReview() {
-  closeIssues();
-  if (app.footnotes && app.footnotes.isOpen) app.footnotes.close();
+  closeOtherDrawers('review');
   $('#review').hidden = false;
   $('#btn-review').setAttribute('aria-pressed', 'true');
   renderReview();
@@ -1078,8 +1132,22 @@ function setView(mode) {
    Issues drawer
    -------------------------------------------------------------------------- */
 
+/** Only one drawer can occupy the strip at the foot of the window. */
+function closeOtherDrawers(keep) {
+  if (keep !== 'issues') closeIssues();
+  if (keep !== 'footnotes' && app.footnotes && app.footnotes.isOpen) {
+    app.footnotes.close();
+    $('#btn-footnotes').setAttribute('aria-pressed', 'false');
+  }
+  if (keep !== 'sources' && app.sources && app.sources.isOpen) {
+    app.sources.close();
+    $('#btn-sources').setAttribute('aria-pressed', 'false');
+  }
+  if (keep !== 'review') closeReview();
+}
+
 function openIssues() {
-  if (app.footnotes && app.footnotes.isOpen) ctx.toggleFootnotePanel();
+  closeOtherDrawers('issues');
   $('#issues').hidden = false;
   $('#btn-issues').setAttribute('aria-pressed', 'true');
 }
@@ -1130,6 +1198,16 @@ function boot() {
     onNew: () => { app.session.openBlank(); activate(app.session.activeId); },
   });
 
+  const panelHandlers = {
+    getBody: () => app.editor.getText(),
+    setBody: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
+    goToLine: (line) => app.editor.goToLine(line),
+    toast,
+    confirm: (title, message) => dialog.ask(title, message, { danger: true }),
+  };
+
+  app.sources = new SourcePanel($('#sources'), panelHandlers);
+
   app.footnotes = new FootnotePanel($('#footnotes'), {
     getBody: () => app.editor.getText(),
     setBody: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
@@ -1162,6 +1240,7 @@ function boot() {
   $('#btn-review-accept-all').addEventListener('click', () => applyReviewAll('accept'));
   $('#btn-review-reject-all').addEventListener('click', () => applyReviewAll('reject'));
   $('#btn-footnotes').addEventListener('click', () => ctx.toggleFootnotePanel());
+  $('#btn-sources').addEventListener('click', () => ctx.toggleSourcePanel());
   $('#btn-issues').addEventListener('click', () => { if ($('#issues').hidden) openIssues(); else closeIssues(); });
   $('#btn-issues-close').addEventListener('click', closeIssues);
 
@@ -1174,6 +1253,7 @@ function boot() {
       if (shortcuts.isOpen()) { shortcuts.close(); return; }
       if (panelIsOpen()) { closePanel(); return; }
       if (!$('#review').hidden) { closeReview(); return; }
+      if (app.sources.isOpen) { ctx.toggleSourcePanel(); return; }
       if (app.footnotes.isOpen) { ctx.toggleFootnotePanel(); return; }
       if (!$('#issues').hidden) { closeIssues(); return; }
       return;

@@ -168,6 +168,9 @@
 .issue__code b { display: block; font-family: var(--font-ui); font-size: 0.7rem;
                  direction: rtl; text-align: right; margin-bottom: 4px; opacity: 0.8; font-weight: 500; }
 
+.issue__actions { display: flex; gap: 6px; margin-top: 10px; }
+.issue__actions .btn { min-height: 28px; padding: 5px 14px; font-size: 0.78rem; }
+
 .issues__empty { padding: 26px 18px; text-align: center; color: var(--fg-dim); font-size: 0.85rem; }
 
 /* --------------------------------------------------------------------------

@@ -10,7 +10,7 @@
 ```
 asb-studio/
 ├── index.html          ← استودیو. بیرونِ همه‌ی پوشه‌ها
-├── _headers            ← هدرهای Cloudflare Pages
+├── vercel.json         ← هدرهای میزبانی
 ├── supabase/
 │   └── 01-schema.sql   ← جدول مشترک
 ├── serve.py
@@ -55,6 +55,9 @@ styles/    ← tokens تنها جای تعریف رنگ و اندازه است
 | `model/schema.js` | دسته‌بندی‌ها، فیلدها، نقش‌ها و شبکه‌ها |
 | `model/doctype.js` | تشخیص اثر از پدیدآورنده |
 | `model/normalize.js` | شناسنامه‌ی استاندارد؛ همه‌ی فیلدها، ترتیب ثابت |
+| `model/sources.js` | بلوک سرچشمه‌ها |
+| `ui/sources.js` | پانل سرچشمه‌ها |
+| `ui/rich-field.js` | قالب‌بندی مارک‌دان داخل کادرهای کوچک |
 | `markdown/direction.js` | جهت متن بر اساس محتوا، نه اولین حرف |
 | `ui/toolbar-config.js` | انتخاب ابزارهای نوار |
 | `model/paragraph-ids.js` | نسخه‌ی جاوااسکریپتی `freeze_ids.py` |

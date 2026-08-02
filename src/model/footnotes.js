@@ -168,7 +168,17 @@ export function renumberFootnotes(body) {
 
   let changed = 0;
   for (const [from, to] of mapping) if (from !== to) changed++;
-  if (changed === 0) return { body, changed: 0 };
+
+  /* Renaming the ids is only half the job. The definitions themselves sit in
+     whatever order they were written, so after renaming you get
+
+         [^2]: تعریف یک.
+         [^1]: تعریف سه.
+
+     - correct, but unreadable, and it looks broken to anyone opening the file.
+     They are sorted below, which is the part that was missing. */
+  const needsSort = definitionsOutOfOrder(body, mapping);
+  if (changed === 0 && !needsSort) return { body, changed: 0 };
 
   // Rewritten through placeholders so a note becoming "2" cannot collide with
   // the note that is still "2" at that moment.
@@ -185,7 +195,61 @@ export function renumberFootnotes(body) {
     out = out.split(placeholder(from)).join(to);
   }
 
-  return { body: out, changed };
+  return { body: sortDefinitions(out), changed: Math.max(changed, needsSort ? 1 : 0) };
+}
+
+/** True when the definition lines are not in the order the ids will end up. */
+function definitionsOutOfOrder(body, mapping) {
+  const { notes } = readFootnotes(body);
+  const defs = notes
+    .filter((n) => n.defLine !== null && mapping.has(n.id))
+    .sort((a, b) => a.defLine - b.defLine)
+    .map((n) => Number(mapping.get(n.id)));
+
+  return defs.some((value, index) => index > 0 && value < defs[index - 1]);
+}
+
+/**
+ * Puts the definition block in numeric order, in place.
+ *
+ * Only the block itself moves: the lines around it, and any note whose id is
+ * not a number, stay exactly where they are. A note spanning several lines
+ * moves as one piece.
+ */
+export function sortDefinitions(body) {
+  const { notes } = readFootnotes(body);
+  const defined = notes.filter((n) => n.defLine !== null);
+  if (defined.length < 2) return body;
+
+  const lines = body.split('\n');
+
+  // The block runs from the first definition line to the last, and is only
+  // safe to reorder when nothing else is mixed in with it.
+  const first = Math.min(...defined.map((n) => n.defLine)) - 1;
+  const last = Math.max(...defined.map((n) => n.defEndLine)) - 1;
+
+  const owned = new Set();
+  for (const note of defined) {
+    for (let i = note.defLine - 1; i <= note.defEndLine - 1; i++) owned.add(i);
+  }
+  for (let i = first; i <= last; i++) {
+    if (!owned.has(i) && lines[i].trim() !== '') return body;   // prose in between
+  }
+
+  const blank = lines.slice(first, last + 1).some((line) => line.trim() === '');
+
+  const blocks = defined
+    .map((note) => ({
+      id: note.id,
+      numeric: /^\d+$/.test(note.id) ? Number(note.id) : Number.MAX_SAFE_INTEGER,
+      text: lines.slice(note.defLine - 1, note.defEndLine).join('\n'),
+    }))
+    .sort((a, b) => a.numeric - b.numeric || String(a.id).localeCompare(String(b.id)));
+
+  const rebuilt = blocks.map((b) => b.text).join(blank ? '\n\n' : '\n');
+  lines.splice(first, last - first + 1, ...rebuilt.split('\n'));
+
+  return lines.join('\n');
 }
 
 /** The next free numeric id. */

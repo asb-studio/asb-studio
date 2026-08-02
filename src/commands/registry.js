@@ -43,6 +43,7 @@ const ICONS = {
   table: 'M3 5h18v14H3zM3 10h18M9 10v9M15 10v9',
   footnote: 'M4 6h11M4 11h11M4 16h7M18 4v7M15 7h6',
   notes: 'M5 3h14v18l-7-4-7 4zM9 8h6M9 12h6',
+  sources: 'M4 5h11a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2zM17 8h3v12H8M8 9h5M8 13h5',
   rule: 'M4 12h16',
   list: 'M8 6h13M8 12h13M8 18h13M4 6h.01M4 12h.01M4 18h.01',
   reader: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z',
@@ -147,6 +148,8 @@ export const COMMANDS = [
   { id: 'paywall', menu: 'insert', label: 'دیوار پرداخت', icon: 'paywall',
     tip: 'اثر پولی بدون این، اصلاً منتشر نمی‌شود',
     run: (ctx) => ctx.editor.insertBlock(MARKERS.paywall) },
+  { id: 'sources', menu: 'insert', label: 'سرچشمه‌ها', icon: 'sources',
+    tip: 'پانل سرچشمه‌ها', run: (ctx) => ctx.toggleSourcePanel() },
   { id: 'toc', menu: 'insert', label: 'فهرست مطالب', icon: 'toc', separatorBefore: true,
     tip: 'ساختن فهرست از روی عنوان‌ها', run: (ctx) => ctx.buildTableOfContents() },
 

@@ -138,6 +138,21 @@
     </div>
 
     <!-- ================================================================
+         Sources drawer. Same shape as the footnotes: short entries edited at
+         the foot of a piece.
+         ================================================================ -->
+    <div class="footnotes-drawer" id="sources" hidden>
+      <div class="fn-head">
+        <span>سرچشمه‌ها</span>
+        <span id="source-summary" class="status--ok"></span>
+        <span class="spacer"></span>
+        <button class="btn btn--quiet" id="btn-source-add">افزودن سرچشمه</button>
+        <button class="btn btn--quiet" id="btn-source-close">بستن</button>
+      </div>
+      <div class="fn-list" id="source-list"></div>
+    </div>
+
+    <!-- ================================================================
          Footnote drawer. At the foot of the window, the way notes sit at
          the foot of a page.
          ================================================================ -->
@@ -160,6 +175,7 @@
       <button id="btn-stats" data-tip="آمار ویراستاری این متن">آمار متن</button>
       <button id="btn-usage" data-tip="کارنامه‌ی کار تو در این مرورگر">کارنامه</button>
       <button id="btn-footnotes" aria-pressed="false" data-tip="پانل پانویس‌ها (Ctrl+Shift+F)">پانویس‌ها</button>
+      <button id="btn-sources" aria-pressed="false" data-tip="سرچشمه‌ها">سرچشمه‌ها</button>
       <button id="btn-review" aria-pressed="false" data-tip="تغییرهای ردیابی‌شده (Ctrl+Shift+R)">تغییرها</button>
       <span class="spacer"></span>
       <button id="btn-ready" class="status--ok">آماده‌ی انتشار</button>

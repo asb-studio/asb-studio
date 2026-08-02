@@ -38,8 +38,25 @@ function fencedLines(lines) {
 }
 
 function finding(rule, severity, lineIndex, message, excerpt, fix) {
-  return { rule, severity, line: lineIndex + 1, message, excerpt, fix };
+  // `fix` is the corrected text. `fixable` says the studio can apply it
+  // itself - which is only true when repair.js has a rule for it, and is what
+  // puts the button on the row in the issues drawer.
+  return {
+    rule, severity, line: lineIndex + 1, message, excerpt, fix,
+    fixable: FIXABLE.has(rule),
+  };
 }
+
+/* Rules markdown/repair.js knows how to correct. Kept here so a finding can
+   say for itself whether it is fixable, rather than the drawer guessing. */
+const FIXABLE = new Set([
+  'attr-same-line',
+  'heading-attr-own-line',
+  'backslash-break',
+  'pandoc-span',
+  'sources-heading',
+  'frontmatter-in-body',
+]);
 
 /* --------------------------------------------------------------------------
    Rules
@@ -261,8 +278,8 @@ export function lintDocument(doc) {
       /^[A-Za-z_][A-Za-z0-9_-]*\s*:/m.test(doc.body.slice(4, doc.body.indexOf('\n---', 4)))) {
     out.unshift({
       rule: 'frontmatter-in-body', severity: SEVERITY.ERROR, line: 1,
-      message: 'یک بلوک فرانت‌متر داخل خودِ متن است. شناسنامه جای پنل «آماده‌ی انتشار» است، نه ستون متن. با دکمه‌ی تعمیر برداشته می‌شود.',
-      excerpt: doc.body.split('\n').slice(0, 3).join('\n'), fix: null,
+      message: 'یک بلوک فرانت‌متر داخل خودِ متن است. شناسنامه جای پنل «آماده‌ی انتشار» است، نه ستون متن.',
+      excerpt: doc.body.split('\n').slice(0, 3).join('\n'), fix: null, fixable: true,
     });
   }
 

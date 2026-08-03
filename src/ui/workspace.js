@@ -76,7 +76,10 @@ function render(root, rows, handlers) {
 
     const meta = document.createElement('span');
     meta.className = 'ws-meta';
-    meta.textContent = `${row.updated_email || '—'} · ${ago(row.updated_at)}`;
+    // The part before the @ is the closest thing to a name the row carries;
+    // a full address here is noise in a list of twenty.
+    const who = String(row.updated_email || '').split('@')[0] || '—';
+    meta.textContent = `${who} · ${ago(row.updated_at)}`;
 
     item.append(path, meta);
 
@@ -84,7 +87,7 @@ function render(root, rows, handlers) {
       const lock = document.createElement('span');
       const isMine = row.lockedBy === mine;
       lock.className = 'ws-lock' + (isMine ? ' ws-lock--mine' : '');
-      lock.textContent = isMine ? 'دست خودت' : `دست ${row.lockedBy}`;
+      lock.textContent = isMine ? 'دست خودت' : `دست ${String(row.lockedBy).split('@')[0]}`;
       item.appendChild(lock);
     }
 

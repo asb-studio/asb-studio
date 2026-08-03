@@ -86,6 +86,14 @@ export async function updateName(name) {
   if (error) throw error;
 }
 
+export async function signOut() {
+  await supabase.auth.signOut();
+}
+
+export function onAuthChange(fn) {
+  supabase.auth.onAuthStateChange((_event, session) => fn(session ? session.user : null));
+}
+
 /* --------------------------------------------------------------------------
    Documents
    -------------------------------------------------------------------------- */

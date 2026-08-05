@@ -12,6 +12,7 @@
    ========================================================================== */
 
 import { MENUS, commandsInMenu, iconSvg } from '../commands/registry.js';
+import { place, follow } from './popover.js';
 
 const KEY_LABELS = {
   'Mod-b': 'Ctrl+B', 'Mod-i': 'Ctrl+I', 'Mod-k': 'Ctrl+K',
@@ -136,13 +137,25 @@ export class MenuBar {
   _openMenu(wrap) {
     this.closeAll();
     this._syncChecks(wrap);
+
+    const list = wrap.querySelector('.menu__list');
+    const button = wrap.querySelector('.menu__button');
+
     wrap.classList.add('is-open');
-    wrap.querySelector('.menu__list').hidden = false;
-    wrap.querySelector('.menu__button').setAttribute('aria-expanded', 'true');
+    list.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+
+    // Positioned against the window rather than inside the bar, so a bar that
+    // scrolls or wraps cannot clip the list. See ui/popover.js.
+    place(list, button, 'start');
+    this._unfollow = follow(list, button, () => this.closeAll());
+
     this.open = wrap;
   }
 
   closeAll() {
+    if (this._unfollow) { this._unfollow(); this._unfollow = null; }
+
     for (const wrap of this.root.querySelectorAll('.menu')) {
       wrap.classList.remove('is-open');
       wrap.querySelector('.menu__list').hidden = true;

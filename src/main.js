@@ -31,13 +31,15 @@ import { renderPreview } from './markdown/preview.js';
 import { lintDocument, SEVERITY } from './markdown/lint.js';
 import { repairBody, repairOne, previewRepair } from './markdown/repair.js';
 import { findChanges, resolveOne, resolveAll, countChanges } from './markdown/critic.js';
+import { isTracking, setTracking } from './model/track.js';
+import { buildReviewReport } from './export/review-report.js';
 import { migrateBody, findRemainingHtml } from './markdown/migrate.js';
 import { MarkdownEditor } from './editor/editor.js';
 import { Sidebar } from './ui/sidebar.js';
 import { Tabs } from './ui/tabs.js';
 import { FootnotePanel } from './ui/footnotes.js';
 import { SourcePanel } from './ui/sources.js';
-import { Toolbar, bindShortcuts } from './ui/toolbar.js';
+import { Toolbar, bindAppShortcuts, editorShortcuts } from './ui/toolbar.js';
 import { MenuBar } from './ui/menubar.js';
 import { initTheme, nextTheme, setTheme, getTheme, getThemeLabel } from './ui/theme.js';
 import { openTableBuilder } from './ui/table-builder.js';
@@ -102,6 +104,7 @@ const app = {
   menubar: null,
   toolbar: null,
   view: 'split',
+  effectiveView: 'split',
   user: null,       // the signed-in person, or null
   present: [],      // everyone else who is online right now
   lockTimer: null,  // keeps the workspace lock alive while a document is open
@@ -530,18 +533,29 @@ const ctx = {
 
   /* The reference goes in at the caret, the definition at the end of the file,
      and the drawer opens so the text can be written straight away. */
-  insertFootnote() {
+  /* Reference at the caret, definition at the foot of the file - and the view
+     stays exactly where it was.
+
+     The old version rebuilt the whole document with setText to append the
+     definition, which reset the scroll and threw the caret back to the top of
+     the text. Appending as an edit leaves everything else untouched. */
+  async insertFootnote() {
     const id = nextFootnoteId(app.editor.getText());
+
+    const values = await dialog.form(`پانویس ${fa(id)}`, [
+      { name: 'text', label: 'متن پانویس', value: '',
+        placeholder: 'احمد اخوت، تا روشنایی بنویس، ص ۱۶۱.',
+        hint: 'خالی بگذار تا بعداً در پانل پانویس‌ها بنویسی.' },
+    ], { confirmLabel: 'درج' });
+
+    if (!values) return;
+
     app.editor.replaceSelection(`[^${id}]`);
+    app.editor.appendDefinition(`[^${id}]: ${values.text.trim()}`);
 
-    const current = app.editor.getText().replace(/\s+$/, '');
-    app.editor.setText(`${current}\n\n[^${id}]: `);
-
+    markDirty(true);
     refresh();
-    app.footnotes.open();
-    const field = $('#footnote-list').querySelector('.fn-row:last-of-type .fn-text');
-    if (field) field.focus();
-    toast(`پانویس ${fa(id)} ساخته شد`);
+    toast(`پانویس ${fa(id)} درج شد`);
   },
 
   toggleFootnotePanel() {
@@ -549,12 +563,14 @@ const ctx = {
     if (!app.footnotes.isOpen) closeOtherDrawers('footnotes');
     app.footnotes.toggle();
     $('#btn-footnotes').setAttribute('aria-pressed', String(app.footnotes.isOpen));
+    syncDrawerHeight();
   },
 
   toggleSourcePanel() {
     if (!app.sources.isOpen) closeOtherDrawers('sources');
     app.sources.toggle();
     $('#btn-sources').setAttribute('aria-pressed', String(app.sources.isOpen));
+    syncDrawerHeight();
   },
 
   buildTableOfContents() {
@@ -985,6 +1001,63 @@ const ctx = {
 
   /* --- tracked changes ---------------------------------------------------- */
 
+  isTracking() { return isTracking(tab()); },
+
+  /* A switch, the way Word has one. Marking things up by remembering to reach
+     for the right button is not how anybody edits; you turn recording on at
+     the start of a pass and it stays on. */
+  toggleTracking() {
+    const current = tab();
+    if (!current) { toast('اول یک سند باز کن'); return; }
+
+    const on = setTracking(current, !isTracking(current));
+    updateStatusBar();
+
+    toast(on
+      ? 'ردیاب تغییرات روشن شد — از این به بعد ویرایش‌ها را علامت بزن'
+      : 'ردیاب تغییرات خاموش شد');
+  },
+
+  /* The page an author is sent. A .md full of {++ ++} is readable to anyone
+     who knows CriticMarkup and opaque to every writer who has just handed over
+     a story - so it becomes a page they can open on a phone. */
+  async exportReviewReport() {
+    const current = tab();
+    if (!current) { toast('اول یک سند باز کن'); return; }
+
+    syncLoadedTab();
+
+    if (countChanges(current.doc.body) === 0) {
+      await dialog.say('گزارش تغییرات',
+        'هیچ تغییر علامت‌خورده‌ای در این متن نیست. اول ردیاب را روشن کن و ویرایش‌هایت را علامت بزن.');
+      return;
+    }
+
+    const values = await dialog.form('گزارش برای پدیدآورنده', [
+      { name: 'editor', label: 'به نام', value: app.user ? remote.displayName(app.user) : '',
+        hint: 'زیر عنوان اثر نوشته می‌شود.' },
+    ], { confirmLabel: 'ساختن صفحه' });
+
+    if (!values) return;
+
+    const { html, filename, changes } = buildReviewReport({
+      doc: current.doc,
+      editor: values.editor,
+    });
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    toast(`صفحه‌ی ${fa(changes)} تغییر ساخته شد — بفرستش برای پدیدآورنده`);
+  },
+
   /* The selected words stay as the "before" side and the caret lands in the
      "after" side, ready to type the replacement. */
   trackReplace() {
@@ -1267,6 +1340,7 @@ async function applyReviewAll(action) {
 function openReview() {
   closeOtherDrawers('review');
   $('#review').hidden = false;
+  setDrawerHeight(true);
   $('#btn-review').setAttribute('aria-pressed', 'true');
   renderReview();
 }
@@ -1274,18 +1348,44 @@ function openReview() {
 function closeReview() {
   $('#review').hidden = true;
   $('#btn-review').setAttribute('aria-pressed', 'false');
+  syncDrawerHeight();
 }
 
+const NARROW = window.matchMedia('(max-width: 820px)');
+
 function setView(mode) {
+  // Two columns on a phone is two columns of two words. Below the breakpoint
+  // there is only ever one pane, so asking for "split" gives the text.
+  const effective = NARROW.matches && mode === 'split' ? 'source' : mode;
+
   const shell = $('.app');
   shell.classList.remove('view-source', 'view-preview');
-  if (mode !== 'split') shell.classList.add(`view-${mode}`);
-  app.view = mode;
+  if (effective !== 'split') shell.classList.add(`view-${effective}`);
+
+  app.view = mode;               // what was asked for
+  app.effectiveView = effective; // what is on screen
+
+  const swap = $('#btn-swap');
+  if (swap) {
+    swap.textContent = effective === 'preview' ? 'متن' : 'پیش‌نمایش';
+    swap.dataset.tip = effective === 'preview' ? 'رفتن به متن' : 'رفتن به پیش‌نمایش';
+  }
+}
+
+/** The one-tap swap a phone needs, since both panes cannot be shown at once. */
+function swapView() {
+  setView(app.effectiveView === 'preview' ? 'source' : 'preview');
 }
 
 /* --------------------------------------------------------------------------
    Issues drawer
    -------------------------------------------------------------------------- */
+
+/* How tall an open drawer is. Set as a grid row, so the editor and the
+   preview actually shrink and nothing ends up hidden underneath. */
+function setDrawerHeight(open) {
+  document.querySelector('.app').style.setProperty('--drawer-h', open ? 'min(38vh, 380px)' : '0px');
+}
 
 /** Only one drawer can occupy the strip at the foot of the window. */
 function closeOtherDrawers(keep) {
@@ -1298,17 +1398,31 @@ function closeOtherDrawers(keep) {
     app.sources.close();
     $('#btn-sources').setAttribute('aria-pressed', 'false');
   }
-  if (keep !== 'review') closeReview();
+  if (keep !== 'review') {
+    $('#review').hidden = true;
+    $('#btn-review').setAttribute('aria-pressed', 'false');
+  }
 }
 
 function openIssues() {
   closeOtherDrawers('issues');
   $('#issues').hidden = false;
+  setDrawerHeight(true);
   $('#btn-issues').setAttribute('aria-pressed', 'true');
 }
 function closeIssues() {
   $('#issues').hidden = true;
   $('#btn-issues').setAttribute('aria-pressed', 'false');
+  syncDrawerHeight();
+}
+
+/** True when any drawer is showing. */
+function syncDrawerHeight() {
+  const open = !$('#issues').hidden
+    || !$('#review').hidden
+    || (app.footnotes && app.footnotes.isOpen)
+    || (app.sources && app.sources.isOpen);
+  setDrawerHeight(open);
 }
 
 /* --------------------------------------------------------------------------
@@ -1351,7 +1465,7 @@ function boot() {
     app.usage.ping();
     refreshSoon();
     saveSessionSoon();
-  });
+  }, editorShortcuts(ctx));
 
   app.editor.onCursor(({ line, column, total }) => {
     $('#cursor').textContent = `خط ${fa(line)} از ${fa(total)} · ستون ${fa(column)}`;
@@ -1389,7 +1503,7 @@ function boot() {
 
   app.menubar = new MenuBar($('#menubar'), ctx);
   app.toolbar = new Toolbar($('#toolbar'), ctx);
-  bindShortcuts(ctx);
+  bindAppShortcuts(ctx);
 
   /* --- title bar --- */
   $('#btn-open').addEventListener('click', doOpen);
@@ -1408,6 +1522,12 @@ function boot() {
   $('#btn-usage').addEventListener('click', showUsage);
   // Two words, two doors: clicking the right half opens sign-in, the left
   // half sign-up. Signed in, the whole thing is the account menu.
+  $('#btn-swap').addEventListener('click', swapView);
+
+  // Rotating the phone, or dragging a desktop window narrow, changes which
+  // views are possible - so the current one is re-applied.
+  NARROW.addEventListener('change', () => setView(app.view));
+
   $('#btn-account').addEventListener('click', (event) => {
     if (app.user) { ctx.openAccount(); return; }
     const target = event.target.closest('[data-mode]');
@@ -1437,43 +1557,52 @@ function boot() {
       return;
     }
 
-    // Alt keys first: Ctrl+W and Ctrl+Tab belong to the browser, and Chrome
-    // ignores preventDefault on both. Reaching for them would have closed the
-    // whole browser tab instead of a document.
-    if (e.altKey && !e.ctrlKey && !e.metaKey) {
-      const digit = parseInt(e.key, 10);
-      if (Number.isFinite(digit) && digit >= 1 && digit <= 9) {
-        const target = app.session.tabs[digit - 1];
+    /* Tab switching lives on Ctrl+Alt, and every other combination was tried
+       first: Ctrl+W and Ctrl+Tab belong to the browser and Chrome ignores
+       preventDefault on them; plain Alt+Left and Alt+Right are back and
+       forward; Alt+digit is taken on some platforms. Ctrl+Alt is free. */
+    if (e.altKey && (e.ctrlKey || e.metaKey)) {
+      // Digit1..Digit9, not the character - a Persian layout prints ۱ here.
+      const digit = /^Digit([1-9])$/.exec(e.code);
+      if (digit) {
+        const target = app.session.tabs[Number(digit[1]) - 1];
         if (target) { e.preventDefault(); activate(target.id); }
         return;
       }
-      if (e.key.toLowerCase() === 'w') {
+      if (e.code === 'KeyW') {
         e.preventDefault();
         if (tab()) closeTab(tab().id);
         return;
       }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
         const list = app.session.tabs;
         if (list.length < 2) return;
         e.preventDefault();
         const index = list.findIndex((t) => t.id === app.session.activeId);
-        const step = e.key === 'ArrowRight' ? -1 : 1;   // RTL: right means back
+        const step = e.code === 'ArrowRight' ? -1 : 1;   // RTL: right means back
         activate(list[(index + step + list.length) % list.length].id);
         return;
       }
     }
 
     const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return;
-    const key = e.key.toLowerCase();
+    if (!mod || e.altKey) return;   // Ctrl+Alt combinations were handled above
 
-    if (key === '/') { e.preventDefault(); shortcuts.toggle(); }
-    else if (e.shiftKey && key === 'p') { e.preventDefault(); openPanel(); }
-    else if (e.shiftKey && key === 'f') { e.preventDefault(); ctx.toggleFootnotePanel(); }
-    else if (e.shiftKey && key === 'r') { e.preventDefault(); ctx.toggleReviewPanel(); }
-    else if (e.shiftKey && key === 's') { e.preventDefault(); doSaveAs(); }
-    else if (key === 's') { e.preventDefault(); doSave(); }
-    else if (key === 'o') { e.preventDefault(); doOpen(); }
+    /* event.code, not event.key: on a Persian keyboard the B key reports 'ذ'
+       and every one of these shortcuts silently stopped working. The physical
+       key never changes. */
+    const code = e.code;
+
+    if (code === 'Slash') { e.preventDefault(); shortcuts.toggle(); }
+    // Not Ctrl+Shift+P: it sits one slipped modifier away from the browser's
+    // print dialog, and a publish panel is not worth that risk.
+    else if (e.shiftKey && code === 'KeyD') { e.preventDefault(); openPanel(); }
+    else if (e.shiftKey && code === 'KeyF') { e.preventDefault(); ctx.toggleFootnotePanel(); }
+    else if (e.shiftKey && code === 'KeyR') { e.preventDefault(); ctx.toggleReviewPanel(); }
+    else if (e.shiftKey && code === 'KeyE') { e.preventDefault(); ctx.toggleTracking(); }
+    else if (e.shiftKey && code === 'KeyS') { e.preventDefault(); doSaveAs(); }
+    else if (code === 'KeyS') { e.preventDefault(); doSave(); }
+    else if (code === 'KeyO') { e.preventDefault(); doOpen(); }
   });
 
   /* --- drag and drop anywhere --- */
@@ -1499,6 +1628,7 @@ function boot() {
   });
 
   setupGutter();
+  setView(app.view);
   mountLogos();
   app.usage.start(() => (tab() ? tab().name : null));
 

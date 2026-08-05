@@ -51,13 +51,24 @@
       <div class="titlebar__actions">
         <button class="btn" id="btn-open" data-tip="باز کردن فایل (Ctrl+O)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-          باز کردن
+          <span>باز کردن</span>
         </button>
         <button class="btn btn--primary" id="btn-save" data-tip="ذخیره روی همین فایل (Ctrl+S)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          ذخیره
+          <span>ذخیره</span>
         </button>
         <button class="btn btn--quiet" id="btn-saveas" data-tip="ذخیره با نام تازه (Ctrl+Shift+S)">با نام…</button>
+      </div>
+
+      <!-- Top right, where every other tool puts it. At the foot of the
+           window it was simply never noticed. -->
+      <!-- Only on narrow screens, where the two panes cannot share the width.
+           Hidden on desktop, which has the split view and the gutter. -->
+      <button class="btn btn--quiet swap" id="btn-swap" data-tip="رفتن به پیش‌نمایش">پیش‌نمایش</button>
+
+      <div class="titlebar__account">
+        <span id="presence" class="presence" hidden></span>
+        <button id="btn-account" class="who">ورود | ثبت‌نام</button>
       </div>
 
       <!-- Absolutely centred, so it stays put as the two button clusters
@@ -170,8 +181,6 @@
     </div>
 
     <footer class="statusbar">
-      <button id="btn-account" class="who">ورود | ثبت‌نام</button>
-      <span id="presence" class="presence" hidden></span>
       <span id="wordcount">۰ کلمه</span>
       <span id="cursor">خط ۱ از ۱ · ستون ۱</span>
       <span id="ids-status" class="status--ok">همه‌ی پاراگراف‌ها شناسه دارند</span>
@@ -179,6 +188,7 @@
       <button id="btn-usage" data-tip="کارنامه‌ی کار تو در این مرورگر">کارنامه</button>
       <button id="btn-footnotes" aria-pressed="false" data-tip="پانل پانویس‌ها (Ctrl+Shift+F)">پانویس‌ها</button>
       <button id="btn-sources" aria-pressed="false" data-tip="سرچشمه‌ها">سرچشمه‌ها</button>
+      <span id="track-light" class="track-light" hidden data-tip="ردیاب تغییرات روشن است (Ctrl+Shift+E)">ردیاب روشن</span>
       <button id="btn-review" aria-pressed="false" data-tip="تغییرهای ردیابی‌شده (Ctrl+Shift+R)">تغییرها</button>
       <span class="spacer"></span>
       <button id="btn-ready" class="status--ok">آماده‌ی انتشار</button>

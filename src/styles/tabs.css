@@ -69,14 +69,12 @@
    side column would squeeze a long note into a four-word ribbon.
    -------------------------------------------------------------------------- */
 
+/* A row in the shell grid, not a floating layer - see styles/layout.css. */
 .footnotes-drawer {
-  position: absolute; inset-inline: 0; inset-block-end: var(--status-h);
-  z-index: 60;
-  max-height: min(48vh, 500px);
+  grid-row: 6; min-height: 0;
   display: flex; flex-direction: column;
   background: var(--panel);
   border-top: 1px solid var(--line);
-  box-shadow: var(--shadow);
 }
 
 .fn-head {

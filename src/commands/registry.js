@@ -74,6 +74,8 @@ const ICONS = {
   trackReplace: 'M4 8h10l-3-3M20 16H10l3 3',
   trackNote: 'M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z',
   review: 'M4 7l3 3 5-6M4 17l3 3 5-6M14 8h7M14 18h7',
+  trackOn: 'M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5zM14 6l4 4',
+  report: 'M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M9 3h6v3H9zM8 12h8M8 16h5',
   theme: 'M12 3v2M12 19v2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M3 12h2M19 12h2M5.6 18.4L7 17M17 7l1.4-1.4',
   keys: 'M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8',
   record: 'M8 3h8a2 2 0 0 1 2 2v16l-6-3-6 3V5a2 2 0 0 1 2-2zM9 8h6M9 12h4',
@@ -137,7 +139,7 @@ export const COMMANDS = [
   { id: 'redo', menu: 'edit', group: 'history', label: 'ازنو', icon: 'redo',
     tip: 'ازنو (Ctrl+Y)', run: (ctx) => ctx.editor.redo() },
   { id: 'find', menu: 'edit', group: 'review', label: 'جست‌وجو و جایگزینی', icon: 'find',
-    tip: 'جست‌وجو و جایگزینی (Ctrl+F)', separatorBefore: true,
+    tip: 'جست‌وجو و جایگزینی (Ctrl+F)', key: 'Mod-f', separatorBefore: true,
     run: (ctx) => ctx.editor.openSearch() },
 
   /* --- insert ----------------------------------------------------------- */
@@ -194,7 +196,14 @@ export const COMMANDS = [
     tip: 'رنگ پاراگراف', run: (ctx) => ctx.setBlockColour() },
 
   /* --- tracked changes --------------------------------------------------- */
+  { id: 'track-toggle', menu: 'track', group: 'review', label: 'ردیابی تغییرات', icon: 'trackOn',
+    tip: 'روشن یا خاموش کردن ردیاب (Ctrl+Shift+E)', key: 'Mod-Shift-e',
+    checked: (ctx) => ctx.isTracking(), run: (ctx) => ctx.toggleTracking() },
+  { id: 'track-report', menu: 'track', label: 'گزارش برای پدیدآورنده', icon: 'report',
+    tip: 'صفحه‌ای که نشان می‌دهد چه تغییر کرده', separatorBefore: true,
+    run: (ctx) => ctx.exportReviewReport() },
   { id: 'track-insert', menu: 'track', group: 'review', label: 'علامت افزودن', icon: 'trackInsert',
+    separatorBefore: true,
     tip: 'متن انتخابی را افزوده علامت بزن', run: (ctx) => ctx.editor.wrapSelection('{++', '++}') },
   { id: 'track-delete', menu: 'track', label: 'علامت حذف', icon: 'trackDelete',
     tip: 'متن انتخابی را حذف‌شده علامت بزن', run: (ctx) => ctx.editor.wrapSelection('{--', '--}') },
@@ -227,7 +236,7 @@ export const COMMANDS = [
 
   /* --- view -------------------------------------------------------------- */
   { id: 'publish', menu: 'view', group: 'review', label: 'شناسنامه و انتشار', icon: 'publish',
-    tip: 'شناسنامه و بررسی نهایی (Ctrl+Shift+P)', run: (ctx) => ctx.openPanel() },
+    tip: 'شناسنامه و بررسی نهایی (Ctrl+Shift+D)', run: (ctx) => ctx.openPanel() },
   { id: 'view-split', menu: 'view', label: 'دو ستونی', separatorBefore: true,
     checked: (ctx) => ctx.currentView() === 'split', run: (ctx) => ctx.setView('split') },
   { id: 'view-source', menu: 'view', label: 'فقط متن',

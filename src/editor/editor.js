@@ -18,7 +18,7 @@
 import {
   EditorState, EditorSelection, EditorView, keymap, history, historyKeymap, defaultKeymap,
   indentWithTab, markdown, markdownLanguage, syntaxHighlighting, HighlightStyle,
-  tags, search, searchKeymap, openSearchPanel,
+  tags, search, searchKeymap, openSearchPanel, moveLineUp, moveLineDown,
   drawSelection, highlightActiveLine, highlightTrailingWhitespace, undo, redo,
 } from '../../vendor/codemirror.js';
 
@@ -130,7 +130,13 @@ export class MarkdownEditor {
    * @param {HTMLElement} parent  where to mount
    * @param {(text: string) => void} onChange  fired on every document edit
    */
-  constructor(parent, onChange) {
+  /**
+   * @param {HTMLElement} parent
+   * @param {(text: string) => void} onChange
+   * @param {Array<{key: string, run: Function}>} shortcuts  editor bindings,
+   *   placed AHEAD of CodeMirror's own so they win. See the note below.
+   */
+  constructor(parent, onChange, shortcuts = []) {
     this.onChange = onChange;
     this._cursorListeners = [];
 
@@ -161,7 +167,43 @@ export class MarkdownEditor {
           syntaxHighlighting(asbHighlight),
           asbTheme,
           EditorView.lineWrapping,
-          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+          /* OUR BINDINGS COME FIRST, and that is the whole fix for a bug that
+             took a week to surface.
+
+             CodeMirror's defaultKeymap already claims Mod-i for
+             selectParentSyntax - it grows the selection out to the enclosing
+             syntax node. In Markdown that node is the whole paragraph. So
+             pressing Ctrl+I selected the entire block first, and the italics
+             then wrapped all of it, attribute line and permanent id included.
+             Exactly the "the whole line goes italic" that was reported.
+
+             Within one keymap the earlier binding wins, so listing ours ahead
+             of defaultKeymap takes Mod-i back.
+
+             This also fixes the Persian layout. A window-level listener has to
+             compare event.key, which on a Persian keyboard is 'ذ' rather than
+             'b' - so the shortcuts simply did nothing. CodeMirror matches
+             against the US base layout as well as the active one, so the same
+             physical key works whichever language is switched on. */
+          keymap.of([
+            ...shortcuts,
+
+            /* Ctrl+H is the browser's history window unless something claims
+               it first, and replace is where an editor expects to find it. */
+            { key: 'Mod-h', preventDefault: true,
+              run: (view) => { openSearchPanel(view); return true; } },
+
+            /* Moving a line is Alt+Arrow everywhere, but Chrome reads
+               Alt+Left/Right as back and forward. Up and down are free, and
+               those are the ones this is actually for. */
+            { key: 'Alt-ArrowUp', preventDefault: true, run: moveLineUp },
+            { key: 'Alt-ArrowDown', preventDefault: true, run: moveLineDown },
+
+            ...defaultKeymap,
+            ...historyKeymap,
+            ...searchKeymap,
+            indentWithTab,
+          ]),
           watcher,
         ],
       }),
@@ -310,6 +352,28 @@ export class MarkdownEditor {
     }
 
     this.view.focus();
+  }
+
+  /**
+   * Adds a line at the end of the document without disturbing the view.
+   *
+   * Rebuilding the whole document with setText would reset the scroll and
+   * throw the caret back to the top - which is what made inserting a footnote
+   * feel like losing your place. A plain edit at the end changes nothing else.
+   */
+  appendDefinition(line) {
+    const doc = this.view.state.doc;
+    const text = doc.toString();
+
+    // Trim the trailing blank lines, then leave exactly one.
+    const end = text.replace(/\s+$/, '').length;
+    const separator = end === 0 ? '' : '\n\n';
+
+    this.view.dispatch({
+      changes: { from: end, to: doc.length, insert: `${separator}${line}\n` },
+      // No selection change and no scrollIntoView: the caret stays where the
+      // reference was just inserted.
+    });
   }
 
   /** The attribute line of the block under the caret, or '' when it has none. */

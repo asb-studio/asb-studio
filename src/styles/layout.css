@@ -14,8 +14,12 @@
 
 .app {
   display: grid;
+  /* The last row is the open drawer. It is 0 until one opens, and then the
+     panes genuinely shrink instead of a drawer floating over the text - which
+     is what hid the lines you were scrolling towards. */
   grid-template-rows:
-    var(--bar-h) var(--menu-h) var(--tab-h) var(--toolbar-h) minmax(0, 1fr) var(--status-h);
+    var(--bar-h) var(--menu-h) var(--tab-h) var(--toolbar-h)
+    minmax(0, 1fr) var(--drawer-h, 0px) var(--status-h);
   position: relative;
   height: 100vh;
 }
@@ -119,12 +123,9 @@
    -------------------------------------------------------------------------- */
 
 .issues {
-  position: absolute; inset-inline: 0; inset-block-end: var(--status-h);
-  max-height: min(46vh, 460px); overflow: auto;
+  grid-row: 6; min-height: 0; overflow: auto;
   background: var(--panel);
   border-top: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  z-index: 60;
 }
 
 .issues__head {
@@ -177,7 +178,10 @@
    Status bar
    -------------------------------------------------------------------------- */
 
+/* Row 7 explicitly. Without it the status bar auto-placed into row 6 - the
+   drawer's row - and sat in the wrong place with a gap underneath. */
 .statusbar {
+  grid-row: 7;
   display: flex; align-items: center; gap: 14px;
   padding: 0 16px;
   background: var(--panel); border-top: 1px solid var(--line);
@@ -213,19 +217,12 @@
    Narrow screens
    -------------------------------------------------------------------------- */
 
-@media (max-width: 820px) {
-  .split { grid-template-columns: 1fr; }
-  .gutter, .pane--preview { display: none; }
-  .app.view-preview .pane--preview { display: flex; }
-  .app.view-preview .pane--source { display: none; }
-  .brand__name { display: none; }
-}
-
 /* --------------------------------------------------------------------------
    Empty state
-   When nothing is open, the preview pane carries the house mark. It is the
-   one place in the studio with room for it, and it turns a blank rectangle
-   into something that says whose tool this is.
+
+   When nothing is open, the preview pane carries the house mark. It is the one
+   place with room for it, and it turns a blank rectangle into something that
+   says whose tool this is.
    -------------------------------------------------------------------------- */
 
 .welcome {
@@ -233,15 +230,16 @@
   gap: 20px; height: 100%; min-height: 0; padding: 24px;
   text-align: center;
 }
+
+/* An explicit size, because the SVG inside is told to fill its box - without
+   this the horse grows to the whole pane. */
 .welcome__mark {
-  width: 148px; height: 148px;
+  width: 148px; height: 148px; flex-shrink: 0;
   display: grid; place-items: center;
   color: var(--fg);
 }
 .welcome__mark svg { width: 100%; height: 100%; display: block; }
-/* Mark above, name beneath, a hairline between them. Stacked rather than
-   side by side because the horse is tall and a wordmark beside it would
-   leave the pair lopsided. */
+
 .welcome__name {
   font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; color: var(--fg);
   padding-top: 16px; position: relative;
@@ -251,10 +249,116 @@
   transform: translateX(50%);
   width: 46px; height: 1px; background: var(--line);
 }
+
 .welcome__hint { font-size: 0.85rem; color: var(--fg-dim); line-height: 2; max-width: 34ch; }
 .welcome__hint kbd {
   display: inline-block; font-family: var(--font-mono); font-size: 0.72rem;
   direction: ltr; unicode-bidi: isolate;
   background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 5px; padding: 2px 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Small screens
+
+   The desktop shell is six stacked rows plus two side-by-side panes. On a
+   phone that is four rows of chrome above a column of text two words wide.
+   So below 820px the layout changes shape rather than shrinking: one pane at
+   a time, the tab strip folded away, and the toolbar given the full width.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 820px) {
+  :root {
+    --bar-h: 44px;
+    --menu-h: auto;
+    --tab-h: 30px;
+    --toolbar-h: 44px;
+    --status-h: 36px;
+    --editor-size: 1rem;
+    --preview-size: 1rem;
+  }
+
+  /* Only ever one pane, so the gutter has nothing to divide. */
+  .split { grid-template-columns: 1fr !important; }
+  .gutter { display: none; }
+  .pane--preview { display: none; }
+  .app.view-preview .pane--preview { display: flex; }
+  .app.view-preview .pane--source { display: none; }
+
+  /* The brand cannot be centred over a bar this crowded. */
+  .brand { position: static; transform: none; margin-inline: auto 0; }
+  .brand__name { display: none; }
+  .brand__mark { width: 26px; height: 26px; }
+
+  .titlebar { padding: 0 8px; gap: 4px; }
+  .titlebar__actions .btn { padding: 6px 8px; font-size: 0.78rem; }
+  .titlebar__name { max-width: 14ch; }
+
+  /* Labels go; the icons carry the meaning, and every one of them is also in
+     a menu with its name spelled out. */
+  #btn-open span, #btn-save span { display: none; }
+
+  /* NOT overflow-x: auto. A scrolling box clips anything positioned inside
+     it, and the dropdowns are positioned inside it - which is why tapping a
+     menu appeared to do nothing at all. The menus wrap instead. */
+  .menubar { padding: 0 4px; flex-wrap: wrap; height: auto; }
+  .menu__button { padding: 0 9px; font-size: 0.78rem; }
+  .menu__list { min-width: 210px; max-width: 84vw; }
+
+  .swap {
+    display: inline-flex; margin-inline-start: auto;
+    border: 1px solid var(--line); border-radius: 20px;
+    padding: 5px 14px; font-size: 0.76rem;
+  }
+  .titlebar__account { margin-inline-start: 6px; }
+
+  .toolbar { padding: 0 6px; }
+  .toolbar .btn--icon { width: 36px; min-height: 34px; }
+
+  /* The status bar carried nine items side by side and simply ran off the
+     edge. On a phone it keeps the two that answer "where am I" and the counts
+     that need a glance; everything else is a menu item. */
+  .statusbar { gap: 10px; }
+  #wordcount, #ids-status, #btn-stats, #btn-usage, #btn-sources, #fm-count { display: none; }
+
+  .pane__head { font-size: 0.72rem; padding: 0 10px; }
+
+  .statusbar { gap: 8px; padding: 0 8px; font-size: 0.7rem; overflow-x: auto; }
+  .statusbar button { padding: 4px 6px; }
+
+  /* A drawer on a small screen takes the room it needs. */
+  .app { --drawer-h: 0px; }
+  .issues, .footnotes-drawer, .review-drawer { max-height: 52vh; }
+
+  .issue { padding: 12px 12px; }
+  .fn-row {
+    grid-template-columns: 42px 1fr 30px;
+    grid-template-areas: "num field remove" ". where .";
+    row-gap: 4px;
+  }
+  .fn-num { grid-area: num; }
+  .fn-field { grid-area: field; }
+  .fn-where { grid-area: where; padding-top: 0; }
+  .fn-remove { grid-area: remove; }
+
+  .rv-row { grid-template-columns: 1fr; gap: 8px; }
+  .rv-actions { justify-content: flex-start; }
+
+  .panel { width: min(100%, 100vw); }
+  .dialog { max-height: 88vh; }
+  .dialog__actions { flex-wrap: wrap; }
+
+  .preview { padding: 20px 16px 30vh; }
+  .cm-scroller { padding: 20px 16px 40vh !important; }
+}
+
+/* Phones held upright, where every pixel of height counts. */
+@media (max-width: 520px) {
+  .titlebar__account .who { font-size: 0.68rem; padding: 3px 8px; }
+  .presence__who { display: none; }
+  .tabstrip { padding: 0 4px; }
+  .tab { min-width: 90px; max-width: 150px; }
+  .keys__row { grid-template-columns: 110px 1fr; }
+  .stats__grid { grid-template-columns: repeat(2, 1fr); }
+  .ws-row, .ar-row { grid-template-columns: 1fr; gap: 4px; }
 }

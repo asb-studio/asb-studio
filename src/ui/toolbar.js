@@ -14,6 +14,7 @@
 
 import { COMMANDS, GROUPS, iconSvg } from '../commands/registry.js';
 import { loadTools } from './toolbar-config.js';
+import { place, follow } from './popover.js';
 
 export class Toolbar {
   constructor(root, ctx) {
@@ -68,11 +69,26 @@ export class Toolbar {
     morePanel.className = 'toolbar__overflow';
     morePanel.hidden = true;
 
+    const closeOverflow = () => {
+      morePanel.hidden = true;
+      if (this._unfollow) { this._unfollow(); this._unfollow = null; }
+    };
+
     moreButton.addEventListener('click', (event) => {
       event.stopPropagation();
-      morePanel.hidden = !morePanel.hidden;
+      if (!morePanel.hidden) { closeOverflow(); return; }
+
+      morePanel.hidden = false;
+      // The toolbar needs overflow:hidden to measure itself, and that same
+      // rule was cutting this panel off at the bar's edge - so it is placed
+      // against the window instead. See ui/popover.js.
+      morePanel.dataset.align = 'end';
+      place(morePanel, moreButton, 'end');
+      this._unfollow = follow(morePanel, moreButton, closeOverflow);
     });
-    document.addEventListener('click', () => { morePanel.hidden = true; });
+
+    document.addEventListener('click', closeOverflow);
+    this._closeOverflow = closeOverflow;
 
     more.append(moreButton, morePanel);
 
@@ -132,7 +148,11 @@ export class Toolbar {
       if (used > available) hidden.push(group);
     }
 
-    if (hidden.length === 0) { this.morePanel.innerHTML = ''; return; }
+    if (hidden.length === 0) {
+      this.morePanel.innerHTML = '';
+      if (this._closeOverflow) this._closeOverflow();
+      return;
+    }
 
     for (const group of hidden) group.hidden = true;
     this.more.hidden = false;
@@ -151,7 +171,7 @@ export class Toolbar {
         row.appendChild(document.createTextNode(command.label || command.id));
         row.addEventListener('mousedown', (event) => {
           event.preventDefault();
-          this.morePanel.hidden = true;
+          if (this._closeOverflow) this._closeOverflow();
           command.run(this.ctx);
         });
         this.morePanel.appendChild(row);
@@ -179,25 +199,74 @@ export class Toolbar {
   }
 }
 
-/** Binds the shortcuts declared in the registry. */
-export function bindShortcuts(ctx) {
-  const bindings = COMMANDS.filter((c) => c.key).map((c) => {
-    const parts = c.key.split('-');
-    return {
-      command: c,
-      key: parts[parts.length - 1].toLowerCase(),
-      shift: parts.includes('Shift'),
-      alt: parts.includes('Alt'),
-    };
-  });
+/* --------------------------------------------------------------------------
+   Shortcuts
+
+   Split in two on purpose:
+
+   editorShortcuts()  bindings that act on the text. They are handed to
+                      CodeMirror and placed ahead of its own keymap, so they
+                      beat defaultKeymap - which claims Mod-i for
+                      selectParentSyntax and was quietly expanding the
+                      selection to the whole paragraph before the italics went
+                      on. CodeMirror also matches the US base layout, so these
+                      work with a Persian keyboard switched on.
+
+   bindAppShortcuts() the rest - opening, saving, panels. These are window
+                      level because they must work wherever the focus is, and
+                      they are matched on event.code for the same layout
+                      reason.
+   -------------------------------------------------------------------------- */
+
+/* Which keys belong to the editor rather than the application. */
+const EDITOR_KEYS = new Set(['Mod-b', 'Mod-i', 'Mod-k', 'Mod-f']);
+
+/** CodeMirror bindings, built from the registry. */
+export function editorShortcuts(ctx) {
+  return COMMANDS
+    .filter((c) => c.key && EDITOR_KEYS.has(c.key))
+    .map((c) => ({
+      key: c.key,
+      preventDefault: true,
+      run: () => { c.run(ctx); return true; },
+    }));
+}
+
+/* event.key is the letter the layout produces - 'ذ' on a Persian keyboard, not
+   'b'. event.code is the physical key and never changes, which is why the
+   shortcuts stopped working the moment the keyboard was switched. */
+const CODE_FOR = {
+  b: 'KeyB', i: 'KeyI', k: 'KeyK', o: 'KeyO', s: 'KeyS',
+  n: 'KeyN', f: 'KeyF', p: 'KeyP', r: 'KeyR', w: 'KeyW', e: 'KeyE',
+};
+
+/** Window-level bindings for everything that is not text editing. */
+export function bindAppShortcuts(ctx) {
+  const bindings = COMMANDS
+    .filter((c) => c.key && !EDITOR_KEYS.has(c.key))
+    .map((c) => {
+      const parts = c.key.split('-');
+      const letter = parts[parts.length - 1].toLowerCase();
+      return {
+        command: c,
+        code: CODE_FOR[letter] || null,
+        key: letter,
+        shift: parts.includes('Shift'),
+        alt: parts.includes('Alt'),
+      };
+    });
 
   window.addEventListener('keydown', (event) => {
     if (!(event.ctrlKey || event.metaKey)) return;
 
-    const hit = bindings.find((b) =>
-      event.key.toLowerCase() === b.key &&
-      Boolean(event.shiftKey) === b.shift &&
-      Boolean(event.altKey) === b.alt);
+    const hit = bindings.find((b) => {
+      const matches = b.code
+        ? event.code === b.code
+        : event.key.toLowerCase() === b.key;
+      return matches
+        && Boolean(event.shiftKey) === b.shift
+        && Boolean(event.altKey) === b.alt;
+    });
 
     if (!hit) return;
     event.preventDefault();

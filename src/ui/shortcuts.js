@@ -17,32 +17,44 @@ const EXTRA = [
     ['Ctrl + O', 'باز کردن فایل'],
     ['Ctrl + S', 'ذخیره روی همان فایل'],
     ['Ctrl + Shift + S', 'ذخیره با نام تازه'],
-    ['Alt + W', 'بستن سند'],
-    ['Alt + ← / →', 'سند بعدی و قبلی'],
-    ['Alt + ۱ تا ۹', 'رفتن مستقیم به سند'],
+    ['Ctrl + Alt + W', 'بستن سند'],
+    ['Ctrl + Alt + ← / →', 'سند بعدی و قبلی'],
+    ['Ctrl + Alt + ۱ تا ۹', 'رفتن مستقیم به سند'],
   ]},
   { section: 'جست‌وجو', items: [
     ['Ctrl + F', 'جست‌وجو'],
     ['Ctrl + H', 'جست‌وجو و جایگزینی'],
-    ['Enter', 'مورد بعدی'],
-    ['Shift + Enter', 'مورد قبلی'],
+    ['Enter', 'مورد بعدی — فقط داخل نوار جست‌وجو'],
+    ['Shift + Enter', 'مورد قبلی — فقط داخل نوار جست‌وجو'],
     ['Esc', 'بستن نوار جست‌وجو'],
   ]},
-  { section: 'ویرایش', items: [
+  { section: 'ویرایش متن', items: [
+    ['Enter', 'خط تازه. دو بار یعنی پاراگراف تازه'],
     ['Ctrl + Z', 'واگرد'],
     ['Ctrl + Y', 'ازنو'],
     ['Ctrl + A', 'انتخاب همه'],
-    ['Alt + ↑ / ↓', 'جابه‌جا کردن خط بالا و پایین'],
-    ['Ctrl + کلیک', 'مکان‌نمای دوم — چند جا با هم تایپ کن'],
+    ['Alt + ↑ / ↓', 'جابه‌جا کردن همین خط به بالا و پایین'],
+    ['Alt + کلیک', 'مکان‌نمای دوم — چند جا با هم تایپ کن'],
     ['Home / End', 'ابتدا و انتهای خط'],
+    ['Shift + Home / End', 'انتخاب تا ابتدا یا انتهای خط'],
   ]},
-  { section: 'صفحه', items: [
+  { section: 'پنل‌ها', items: [
+    ['Ctrl + Shift + D', 'شناسنامه و انتشار'],
+    ['Ctrl + Shift + F', 'پانویس‌ها'],
+    ['Ctrl + Shift + R', 'تغییرهای ردیابی‌شده'],
+    ['Ctrl + Shift + E', 'روشن/خاموش کردن ردیاب'],
     ['F1', 'همین راهنما'],
     ['Esc', 'بستن پنجره‌ها'],
   ]},
 ];
 
-const KEY_LABELS = { 'Mod-b': 'Ctrl + B', 'Mod-i': 'Ctrl + I', 'Mod-k': 'Ctrl + K' };
+const KEY_LABELS = {
+  'Mod-b': 'Ctrl + B', 'Mod-i': 'Ctrl + I', 'Mod-k': 'Ctrl + K', 'Mod-f': 'Ctrl + F',
+};
+
+/* Keys already spelled out in EXTRA, so the generated list does not repeat
+   them under a second heading. */
+const LISTED_ELSEWHERE = new Set(['Mod-o', 'Mod-s', 'Mod-Shift-s', 'Mod-Alt-n', 'Mod-Shift-e', 'Mod-f']);
 
 let dialog = null;
 
@@ -53,12 +65,12 @@ function build() {
   el.hidden = true;
 
   const fromRegistry = COMMANDS
-    .filter((c) => c.key)
+    .filter((c) => c.key && !LISTED_ELSEWHERE.has(c.key))
     .map((c) => [KEY_LABELS[c.key] || c.key, (c.tip || c.label || c.id).replace(/\s*\([^)]*\)\s*$/, '')]);
 
   const sections = [
     ...EXTRA.slice(0, 1),
-    { section: 'قلم', items: fromRegistry },
+    { section: 'قالب', items: fromRegistry },
     ...EXTRA.slice(1),
   ];
 
@@ -82,8 +94,9 @@ function build() {
           </section>`).join('')}
       </div>
       <footer class="dialog__actions" style="display:block">
-        بقیه‌ی ابزارها میان‌بر ندارند و از نوار بالا در دسترس‌اند. راهنمای کامل در فایل
-        <code>GUIDE.md</code> است.
+        بقیه‌ی ابزارها میان‌بر ندارند و از منوها در دسترس‌اند.
+        <br>
+        میان‌برها با <b>دکمه‌ی فیزیکی</b> کار می‌کنند، پس با صفحه‌کلید فارسی هم درست‌اند.
       </footer>
     </div>`;
 

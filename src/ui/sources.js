@@ -27,7 +27,8 @@ export class SourcePanel {
     this.list = root.querySelector('#source-list');
     this.summary = root.querySelector('#source-summary');
 
-    root.querySelector('#btn-source-close').addEventListener('click', () => this.close());
+    // Through the handler - see the note in ui/footnotes.js.
+    root.querySelector('#btn-source-close').addEventListener('click', () => this.handlers.onClose());
     root.querySelector('#btn-source-add').addEventListener('click', () => this._add());
   }
 

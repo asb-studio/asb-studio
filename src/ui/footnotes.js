@@ -29,8 +29,11 @@ export class FootnotePanel {
     this.list = root.querySelector('#footnote-list');
     this.summary = root.querySelector('#footnote-summary');
 
+    // Through the handler, not straight to close(): the shell reserves a row
+    // for whichever drawer is open, and closing behind its back left the row
+    // standing as a band of empty colour.
     root.querySelector('#btn-footnote-close')
-      .addEventListener('click', () => this.close());
+      .addEventListener('click', () => this.handlers.onClose());
     root.querySelector('#btn-footnote-renumber')
       .addEventListener('click', () => this._renumber());
   }

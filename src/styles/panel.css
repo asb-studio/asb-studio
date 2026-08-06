@@ -81,17 +81,41 @@ html[dir='rtl'] .panel { transform: translateX(100%); }
    Paper view: the preview at the width the site actually renders
    -------------------------------------------------------------------------- */
 
-.pane--preview.paper-view .pane__body { background: var(--bg); padding: 26px 0; }
+/* The preview normally fills its pane. In paper view it becomes a sheet: the
+   width and margins the published page really has, sitting on a darker desk.
+   The earlier version changed padding alone, which on a wide screen looked
+   like nothing had happened at all. */
+.pane--preview.paper-view .pane__body {
+  background: var(--bg);
+  padding: 28px 20px 60px;
+}
+
 .pane--preview.paper-view .preview {
   background: var(--paper);
-  max-width: 46rem;
+  color: var(--fg);
+  width: 100%;
+  max-width: 42rem;
+  margin: 0 auto;
   border: 1px solid var(--line);
-  border-radius: 4px;
-  box-shadow: var(--shadow);
-  padding: 64px 72px;
+  border-radius: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 12px 34px rgba(0, 0, 0, 0.10);
+  padding: 60px 68px 80px;
+  min-height: 100%;
 }
+
+/* A hairline where the page would end, so the length of a printed page is
+   visible rather than guessed at. */
+.pane--preview.paper-view .preview::after {
+  content: '';
+  display: block;
+  margin: 60px -68px -80px;
+  border-top: 1px dashed var(--line);
+}
+
 @media (max-width: 900px) {
-  .pane--preview.paper-view .preview { padding: 34px 26px; }
+  .pane--preview.paper-view .pane__body { padding: 14px 8px 40px; }
+  .pane--preview.paper-view .preview { padding: 32px 24px 46px; }
+  .pane--preview.paper-view .preview::after { margin: 32px -24px -46px; }
 }
 
 /* --------------------------------------------------------------------------

@@ -214,7 +214,8 @@
   background: none; color: inherit; cursor: pointer;
   font-family: inherit; font-size: 0.84rem; text-align: start;
 }
-.st-menu__item:hover { background: var(--accent-wash); }
+.st-menu__item:hover { background: var(--panel-2); }
+.st-menu__item--on { background: var(--accent-wash); color: var(--accent-strong); font-weight: 600; }
 .st-menu__item .value {
   margin-inline-start: auto; font-size: 0.74rem; color: var(--fg-dim);
 }
@@ -351,10 +352,16 @@
      to be glanced at stays on the bar; everything else moves into the ⋯ menu,
      which is a real list with room for full labels rather than a row of
      crushed, half-cut words. */
-  .statusbar { gap: 8px; padding: 0 8px; }
+  /* One line, three things: where the caret is, whether the tracker is on,
+     and how many issues there are. Everything else is behind the ⋯ button,
+     which is a real list with room for full labels. */
+  .statusbar { gap: 6px; padding: 0 8px; font-size: 0.7rem; }
   .st-fold { display: none !important; }
   .st-more { display: inline-flex !important; }
   #fm-count { display: none; }
+  #cursor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .statusbar .track-light { padding: 2px 8px; font-size: 0.66rem; }
+  #btn-issues { flex-shrink: 0; }
 
   .pane__head { font-size: 0.72rem; padding: 0 10px; }
 

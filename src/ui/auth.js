@@ -17,7 +17,7 @@
    a dialog and not a wall.
    ========================================================================== */
 
-import { requestCode, verifyCode, signOut } from '../storage/supabase.js';
+import { requestCode, verifyCode, currentUser, signOut } from '../storage/supabase.js';
 import * as dialog from './dialog.js';
 
 const LAST_EMAIL = 'asb-studio:last-email';
@@ -183,6 +183,14 @@ export function openAuth(startMode = 'signin') {
         try {
           done(await verifyCode(email, code.value));
         } catch (err) {
+          /* A token can be spent before the person gets to it - a mail scanner
+             following the link in the message does exactly that, and Supabase
+             then answers otp_expired even though the session it created is
+             perfectly good. So before reporting a failure, look whether one
+             exists. */
+          const user = await currentUser();
+          if (user) { done(user); return; }
+
           button.textContent = 'ورود';
           fail(friendly(err, mode));
           code.select();
@@ -233,7 +241,9 @@ function friendly(err, mode) {
     return 'این ایمیل از قبل حساب دارد. از «ورود» استفاده کن.';
   }
   if (/rate|too many|security purposes/i.test(message)) return 'تعداد تلاش زیاد شد. یک دقیقه صبر کن.';
-  if (/expired/i.test(message)) return 'کد منقضی شده. دوباره بخواه.';
+  if (/expired/i.test(message)) {
+    return 'این کد دیگر معتبر نیست. «ایمیل دیگری» را بزن و کد تازه بخواه.';
+  }
   if (/invalid|incorrect|token/i.test(message)) return 'کد درست نیست.';
   if (/network|fetch|failed/i.test(message)) return 'اتصال برقرار نشد. اینترنت را چک کن.';
 

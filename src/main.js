@@ -126,6 +126,79 @@ function markDirty(value) {
 }
 
 /* --------------------------------------------------------------------------
+   Who is signed in, and who else is here
+
+   These three went missing in an earlier round of edits, which is why the
+   account button never stopped saying "ورود | ثبت‌نام" however many times
+   somebody signed in. Every call site was still there; only the functions
+   were gone.
+   -------------------------------------------------------------------------- */
+
+function startPresence() {
+  if (!app.user) return;
+  remote.joinPresence(
+    { email: app.user.email, name: remote.displayName(app.user) },
+    (people) => { app.present = people; renderPresence(); }
+  );
+}
+
+/* Everyone here, minus yourself - you already know you are here. */
+function renderPresence() {
+  const el = $('#presence');
+  if (!el) return;
+
+  const others = app.present.filter((p) => !app.user || p.email !== app.user.email);
+  if (others.length === 0) { el.hidden = true; return; }
+
+  el.hidden = false;
+  el.innerHTML = '';
+
+  for (const person of others) {
+    const chip = document.createElement('span');
+    chip.className = 'presence__who';
+    chip.innerHTML = '<span class="presence__dot"></span>';
+    chip.appendChild(document.createTextNode(person.name || person.email));
+    chip.dataset.tip = `${person.name || ''} (${person.email}) الان آنلاین است`;
+    el.appendChild(chip);
+  }
+}
+
+/** The account button, the recording light, and the presence chips. */
+function updateStatusBar() {
+  const button = $('#btn-account');
+  const current = tab();
+
+  if (button) {
+    if (app.user) {
+      button.textContent = remote.displayName(app.user);
+      button.classList.add('who--in');
+      button.dataset.tip = app.user.email;
+    } else {
+      button.innerHTML =
+        '<span data-mode="signin">ورود</span>'
+        + '<span class="who__sep">|</span>'
+        + '<span data-mode="signup">ثبت‌نام</span>';
+      button.classList.remove('who--in');
+      button.dataset.tip = 'ورود یا ثبت‌نام';
+    }
+  }
+
+  const light = $('#track-light');
+  if (light) {
+    const on = current ? isTracking(current) : false;
+    light.hidden = !on;
+
+    if (on) {
+      const base = baselineOf(current);
+      const n = base === null ? 0 : diffSummary(base, current.doc.body).total;
+      light.textContent = n ? `ردیاب روشن · ${fa(n)} تغییر` : 'ردیاب روشن';
+    }
+  }
+
+  renderPresence();
+}
+
+/* --------------------------------------------------------------------------
    Derived views
    -------------------------------------------------------------------------- */
 
@@ -1149,8 +1222,10 @@ const ctx = {
 
   togglePaperView() {
     const pane = $('.pane--preview');
-    pane.classList.toggle('paper-view');
-    toast(pane.classList.contains('paper-view') ? 'نمای کاغذ روشن شد' : 'نمای کاغذ خاموش شد');
+    const on = pane.classList.toggle('paper-view');
+    toast(on
+      ? 'نمای کاغذ — متن به عرض واقعی صفحه‌ی سایت'
+      : 'نمای عادی — متن تمام پنجره');
   },
 };
 
@@ -1580,7 +1655,10 @@ function setDrawerHeight(open) {
 
 /** Only one drawer can occupy the strip at the foot of the window. */
 function closeOtherDrawers(keep) {
-  if (keep !== 'issues') closeIssues();
+  if (keep !== 'issues') {
+    $('#issues').hidden = true;
+    $('#btn-issues').setAttribute('aria-pressed', 'false');
+  }
   if (keep !== 'footnotes' && app.footnotes && app.footnotes.isOpen) {
     app.footnotes.close();
     $('#btn-footnotes').setAttribute('aria-pressed', 'false');
@@ -1628,6 +1706,13 @@ function boot() {
      anybody has an account; a login only buys the shared workspace. So the
      app starts, and the session is picked up in the background if there is
      one. */
+  /* Supabase leaves #error=... in the address bar when a link it sent has
+     already been spent. It means nothing once the page has loaded, and leaving
+     it there makes every later reload look like a failure. */
+  if (window.location.hash.includes('error')) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
   remote.currentUser().then((user) => {
     app.user = user;
     if (user) startPresence();
@@ -1675,6 +1760,7 @@ function boot() {
   });
 
   const panelHandlers = {
+    onClose: () => { closeOtherDrawers(null); syncDrawerHeight(); },
     getBody: () => app.editor.getText(),
     setBody: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
     goToLine: (line) => app.editor.goToLine(line),
@@ -1684,13 +1770,7 @@ function boot() {
 
   app.sources = new SourcePanel($('#sources'), panelHandlers);
 
-  app.footnotes = new FootnotePanel($('#footnotes'), {
-    getBody: () => app.editor.getText(),
-    setBody: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
-    goToLine: (line) => app.editor.goToLine(line),
-    toast,
-    confirm: (title, message) => dialog.ask(title, message, { danger: true }),
-  });
+  app.footnotes = new FootnotePanel($('#footnotes'), panelHandlers);
 
   app.menubar = new MenuBar($('#menubar'), ctx);
   app.toolbar = new Toolbar($('#toolbar'), ctx);
@@ -1870,6 +1950,9 @@ function setupStatusMenu() {
 
       if (source.tagName === 'BUTTON') {
         item.textContent = source.textContent;
+        if (source.getAttribute('aria-pressed') === 'true') {
+          item.classList.add('st-menu__item--on');
+        }
         item.addEventListener('click', () => { close(); source.click(); });
       } else {
         // A read-out rather than an action: show its label and its value.

@@ -22,6 +22,7 @@
 
 import { MarkdownIt, footnote } from '../../vendor/markdown-it.js';
 import { markupForPreview } from './critic.js';
+import { diffWords } from './diff.js';
 import { directionOfHtml } from './direction.js';
 
 /* Sentinel used to hide a literal backslash from markdown-it's line-break
@@ -251,4 +252,39 @@ function wrapSources(html) {
   );
 
   return `${before}<div class="sources-container">${rest}</div>`;
+}
+
+
+/* --------------------------------------------------------------------------
+   Tracked changes in the preview
+
+   Word calls this All Markup: the same document, shown with what changed. The
+   marks are put in with sentinels and turned into elements only after Markdown
+   has run, so a change spanning a bold word or a link cannot break the syntax
+   around it.
+   -------------------------------------------------------------------------- */
+
+const MARK = {
+  insOpen: '\uE020', insClose: '\uE021',
+  delOpen: '\uE022', delClose: '\uE023',
+};
+
+/**
+ * @param {string} baseline  the text as it was when tracking started
+ * @param {string} body      the text now
+ */
+export function renderMarkedPreview(baseline, body) {
+  let source = '';
+
+  for (const op of diffWords(baseline, body)) {
+    if (op.type === 'same') source += op.text;
+    else if (op.type === 'ins') source += MARK.insOpen + op.text + MARK.insClose;
+    else source += MARK.delOpen + op.text + MARK.delClose;
+  }
+
+  return renderPreview(source)
+    .split(MARK.insOpen).join('<ins class="tracked tracked--ins">')
+    .split(MARK.insClose).join('</ins>')
+    .split(MARK.delOpen).join('<del class="tracked tracked--del">')
+    .split(MARK.delClose).join('</del>');
 }

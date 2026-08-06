@@ -1,17 +1,23 @@
 /* ==========================================================================
    model/track.js
    --------------------------------------------------------------------------
-   Whether tracked changes are being recorded.
+   Recording what an editing pass changed.
 
-   Until now the marks were always available and it was on the editor to
-   remember to use them - which is not how anybody works. In Word the switch
-   is a switch: you turn it on when you start a pass, and from that moment
-   what you do is recorded.
+   THE SWITCH KEEPS A SNAPSHOT, and that is the whole design. Turning tracking
+   on stores the text exactly as it stands; from then on the editor writes
+   normally, and what changed is worked out by comparing that snapshot with
+   the text now.
 
-   The state is per document rather than global, because one file can be
-   under review while another is being drafted, and it belongs to the person
-   editing rather than to the file - so it lives in this browser, keyed by
-   document, and never reaches the .md.
+   The alternative - asking the editor to press a button for every word they
+   touch - is what the studio did before, and it is not editing, it is
+   bookkeeping. Word does not work that way either.
+
+   Comments are the exception and stay manual, because a comment is not a
+   change to the text; it is something said about it, and no comparison can
+   guess at it.
+
+   The snapshot belongs to the person editing rather than to the file, so it
+   lives in this browser and never reaches the .md.
 
    This module must never touch the DOM.
    ========================================================================== */
@@ -28,7 +34,14 @@ function read() {
 }
 
 function write(map) {
-  try { localStorage.setItem(KEY, JSON.stringify(map)); } catch { /* private mode */ }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(map));
+    return true;
+  } catch {
+    // A long manuscript can outgrow the quota. Losing the baseline silently
+    // would be worse than saying so, which is what the caller does with false.
+    return false;
+  }
 }
 
 /** A stable key for a document: its workspace path, or its file name. */
@@ -39,24 +52,56 @@ export function documentKey(tab) {
 
 export function isTracking(tab) {
   const key = documentKey(tab);
-  if (!key) return false;
-  return Boolean(read()[key]);
+  return Boolean(key && read()[key]);
 }
 
-export function setTracking(tab, on) {
+/**
+ * Starts recording. The text as it stands becomes the baseline.
+ * @returns {boolean} false when the snapshot could not be stored
+ */
+export function startTracking(tab, body) {
   const key = documentKey(tab);
   if (!key) return false;
 
   const map = read();
-  if (on) map[key] = { since: Date.now() };
-  else delete map[key];
+  map[key] = { since: Date.now(), baseline: String(body) };
+  return write(map);
+}
 
+export function stopTracking(tab) {
+  const key = documentKey(tab);
+  if (!key) return;
+
+  const map = read();
+  delete map[key];
   write(map);
-  return on;
+}
+
+/** The text as it was when recording started, or null. */
+export function baselineOf(tab) {
+  const key = documentKey(tab);
+  const entry = key ? read()[key] : null;
+  return entry ? entry.baseline : null;
 }
 
 export function trackingSince(tab) {
   const key = documentKey(tab);
   const entry = key ? read()[key] : null;
   return entry ? entry.since : null;
+}
+
+/**
+ * Moves the baseline forward to the current text - everything up to now is
+ * accepted as the new starting point. Used after a report has been sent and
+ * a fresh pass begins.
+ */
+export function rebaseline(tab, body) {
+  const key = documentKey(tab);
+  if (!key) return false;
+
+  const map = read();
+  if (!map[key]) return false;
+
+  map[key] = { since: Date.now(), baseline: String(body) };
+  return write(map);
 }

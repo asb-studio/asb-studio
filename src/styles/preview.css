@@ -142,3 +142,20 @@
   color: var(--fg-faint); text-align: center; padding: 22vh 0; text-indent: 0;
   font-size: 0.9rem;
 }
+
+
+/* --------------------------------------------------------------------------
+   Tracked changes shown in the preview
+   Colour and shape both, so a change reads even where the two colours cannot
+   be told apart.
+   -------------------------------------------------------------------------- */
+
+.preview .tracked { border-radius: 3px; padding: 0 2px; }
+.preview .tracked--ins {
+  background: rgba(76, 175, 125, 0.16); color: var(--ok);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.preview .tracked--del {
+  background: rgba(224, 107, 99, 0.14); color: var(--err);
+  text-decoration: line-through;
+}

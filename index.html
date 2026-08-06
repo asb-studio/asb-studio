@@ -62,10 +62,6 @@
 
       <!-- Top right, where every other tool puts it. At the foot of the
            window it was simply never noticed. -->
-      <!-- Only on narrow screens, where the two panes cannot share the width.
-           Hidden on desktop, which has the split view and the gutter. -->
-      <button class="btn btn--quiet swap" id="btn-swap" data-tip="رفتن به پیش‌نمایش">پیش‌نمایش</button>
-
       <div class="titlebar__account">
         <span id="presence" class="presence" hidden></span>
         <button id="btn-account" class="who">ورود | ثبت‌نام</button>
@@ -142,8 +138,11 @@
         <span>تغییرهای ردیابی‌شده</span>
         <span id="review-summary" class="status--ok"></span>
         <span class="spacer"></span>
-        <button class="btn btn--quiet" id="btn-review-accept-all">پذیرفتن همه</button>
-        <button class="btn btn--quiet" id="btn-review-reject-all">رد کردن همه</button>
+        <button class="btn btn--quiet" id="btn-accept-all">پذیرش همه</button>
+        <button class="btn btn--quiet" id="btn-reject-all">رد همه</button>
+        <button class="btn btn--quiet" id="btn-accept-stop">پذیرش همه و توقف</button>
+        <button class="btn btn--quiet" id="btn-reject-stop">رد همه و توقف</button>
+        <button class="btn btn--quiet" id="btn-review-report">گزارش برای پدیدآورنده</button>
         <button class="btn btn--quiet" id="btn-review-close">بستن</button>
       </div>
       <div class="rv-list" id="review-list"></div>
@@ -181,19 +180,29 @@
     </div>
 
     <footer class="statusbar">
-      <span id="wordcount">۰ کلمه</span>
-      <span id="cursor">خط ۱ از ۱ · ستون ۱</span>
-      <span id="ids-status" class="status--ok">همه‌ی پاراگراف‌ها شناسه دارند</span>
-      <button id="btn-stats" data-tip="آمار ویراستاری این متن">آمار متن</button>
-      <button id="btn-usage" data-tip="کارنامه‌ی کار تو در این مرورگر">کارنامه</button>
-      <button id="btn-footnotes" aria-pressed="false" data-tip="پانل پانویس‌ها (Ctrl+Shift+F)">پانویس‌ها</button>
-      <button id="btn-sources" aria-pressed="false" data-tip="سرچشمه‌ها">سرچشمه‌ها</button>
-      <span id="track-light" class="track-light" hidden data-tip="ردیاب تغییرات روشن است (Ctrl+Shift+E)">ردیاب روشن</span>
-      <button id="btn-review" aria-pressed="false" data-tip="تغییرهای ردیابی‌شده (Ctrl+Shift+R)">تغییرها</button>
+      <!-- Always visible: where the caret is, and whether anything is wrong.
+           Everything else folds into the ⋯ button on a narrow screen. -->
+      <span id="cursor" class="st-keep">خط ۱ از ۱ · ستون ۱</span>
+      <span id="track-light" class="track-light st-keep" hidden
+            data-tip="ردیاب تغییرات روشن است (Ctrl+Shift+E)">ردیاب روشن</span>
+
+      <span class="st-fold" id="wordcount">۰ کلمه</span>
+      <span class="st-fold status--ok" id="ids-status">همه‌ی پاراگراف‌ها شناسه دارند</span>
+      <button class="st-fold" id="btn-stats" data-tip="آمار ویراستاری این متن">آمار متن</button>
+      <button class="st-fold" id="btn-usage" data-tip="کارنامه‌ی کار تو در این مرورگر">کارنامه</button>
+      <button class="st-fold" id="btn-sources" aria-pressed="false" data-tip="سرچشمه‌ها">سرچشمه‌ها</button>
+      <button class="st-fold" id="btn-footnotes" aria-pressed="false" data-tip="پانل پانویس‌ها (Ctrl+Shift+F)">پانویس‌ها</button>
+      <button class="st-fold" id="btn-review" aria-pressed="false" data-tip="تغییرهای ردیابی‌شده (Ctrl+Shift+R)">تغییرها</button>
+
       <span class="spacer"></span>
-      <button id="btn-ready" class="status--ok">آماده‌ی انتشار</button>
-      <span id="lint-status" class="status--ok">بدون ایراد</span>
-      <button id="btn-issues" aria-pressed="false">فهرست ایرادها (<span id="issue-count">۰</span>)</button>
+
+      <button id="btn-ready" class="st-keep status--ok">آماده‌ی انتشار</button>
+      <span class="st-fold status--ok" id="lint-status">بدون ایراد</span>
+      <button id="btn-issues" class="st-keep" aria-pressed="false">ایرادها (<span id="issue-count">۰</span>)</button>
+
+      <!-- The rest, on a phone. -->
+      <button id="btn-more" class="st-more" data-tip="بقیه">⋯</button>
+      <div class="st-menu" id="st-menu" hidden></div>
     </footer>
 
   </div>

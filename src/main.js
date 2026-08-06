@@ -27,11 +27,14 @@ import { BLOCK_COLOURS, loadCategories } from './model/schema.js';
 import { measure } from './model/stats.js';
 import { readFootnotes, nextFootnoteId } from './model/footnotes.js';
 import { UsageTracker } from './model/usage.js';
-import { renderPreview } from './markdown/preview.js';
+import { renderPreview, renderMarkedPreview } from './markdown/preview.js';
 import { lintDocument, SEVERITY } from './markdown/lint.js';
 import { repairBody, repairOne, previewRepair } from './markdown/repair.js';
-import { findChanges, resolveOne, resolveAll, countChanges } from './markdown/critic.js';
-import { isTracking, setTracking } from './model/track.js';
+import { findChanges, countChanges } from './markdown/critic.js';
+import {
+  isTracking, startTracking, stopTracking, baselineOf, rebaseline,
+} from './model/track.js';
+import { diffSummary, changeList, resolveChange } from './markdown/diff.js';
 import { buildReviewReport } from './export/review-report.js';
 import { migrateBody, findRemainingHtml } from './markdown/migrate.js';
 import { MarkdownEditor } from './editor/editor.js';
@@ -45,6 +48,7 @@ import { initTheme, nextTheme, setTheme, getTheme, getThemeLabel } from './ui/th
 import { openTableBuilder } from './ui/table-builder.js';
 import { openArchive } from './ui/archive.js';
 import { openToolbarConfig } from './ui/toolbar-config.js';
+import { place, follow } from './ui/popover.js';
 import { initTooltips } from './ui/tooltip.js';
 import { mountLogos } from './ui/logo.js';
 import { buildEpub } from './export/epub.js';
@@ -105,6 +109,7 @@ const app = {
   toolbar: null,
   view: 'split',
   effectiveView: 'split',
+  showMarkup: true,   // Word's All Markup / No Markup
   user: null,       // the signed-in person, or null
   present: [],      // everyone else who is online right now
   lockTimer: null,  // keeps the workspace lock alive while a document is open
@@ -131,7 +136,16 @@ function refresh() {
 
   const preview = $('#preview');
   const empty = body.trim() === '';
-  preview.innerHTML = empty ? WELCOME : renderPreview(body);
+
+  /* While tracking is on, the preview shows the marks - Word's "All Markup".
+     Turn the display off and it shows the text as it would be published,
+     which is Word's "No Markup". The document itself is the same either way. */
+  const baseline = current ? baselineOf(current) : null;
+  const showMarkup = app.showMarkup && baseline !== null;
+
+  preview.innerHTML = empty
+    ? WELCOME
+    : (showMarkup ? renderMarkedPreview(baseline, body) : renderPreview(body));
   preview.parentElement.classList.toggle('is-empty', empty);
   if (empty) mountLogos(preview);
 
@@ -899,10 +913,43 @@ const ctx = {
 
   async openAccount(mode = 'signin') {
     if (app.user) {
-      const out = await dialog.ask('حساب کاربری',
-        `وارد شده‌ای با ${remote.displayName(app.user)} — ${app.user.email}`,
-        { confirmLabel: 'خروج', cancelLabel: 'بستن', danger: true });
-      if (out) ctx.signOut();
+      const form = document.createElement('div');
+
+      const field = document.createElement('div');
+      field.className = 'field';
+      const label = document.createElement('label');
+      label.textContent = 'نام نمایشی';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'control';
+      input.value = remote.displayName(app.user);
+      const hint = document.createElement('div');
+      hint.className = 'field__hint';
+      hint.textContent = `همین نام را بقیه کنار سندهای باز می‌بینند. ایمیل: ${app.user.email}`;
+      field.append(label, input, hint);
+      form.appendChild(field);
+
+      const result = await dialog.custom('حساب کاربری', form, [
+        { label: 'خروج از حساب', value: 'out', danger: true },
+        { label: 'بستن', value: null, cancel: true },
+        { label: 'ذخیره‌ی نام', value: 'save', primary: true },
+      ]);
+
+      if (result === 'out') { ctx.signOut(); return; }
+      if (result !== 'save') return;
+
+      const name = input.value.trim();
+      if (name && name !== remote.displayName(app.user)) {
+        try {
+          await remote.updateName(name);
+          app.user = await remote.currentUser();
+          startPresence();
+          updateStatusBar();
+          toast('نامت عوض شد');
+        } catch {
+          toast('عوض کردن نام ممکن نشد');
+        }
+      }
       return;
     }
 
@@ -977,6 +1024,7 @@ const ctx = {
   async signOut() {
     if (!app.user) { toast('وارد نشده‌ای'); return; }
 
+
     await releaseAllLocks();
     await remote.leavePresence();
     await remote.signOut();
@@ -996,40 +1044,74 @@ const ctx = {
       toast,
     });
   },
-  setView(mode) { setView(mode); },
+  setView(mode) { requestView(mode); },
   showUsage() { showUsage(); },
 
   /* --- tracked changes ---------------------------------------------------- */
 
   isTracking() { return isTracking(tab()); },
+  markupShown() { return app.showMarkup; },
 
-  /* A switch, the way Word has one. Marking things up by remembering to reach
-     for the right button is not how anybody edits; you turn recording on at
-     the start of a pass and it stays on. */
+  toggleMarkup() {
+    app.showMarkup = !app.showMarkup;
+    refresh();
+    toast(app.showMarkup ? 'نمایش تغییرات' : 'متن نهایی');
+  },
+
+  /* A switch, the way Word has one - and it works by remembering, not by
+     asking. Turning it on stores the text as it stands; everything after is
+     worked out by comparing that snapshot with the text now. */
   toggleTracking() {
     const current = tab();
     if (!current) { toast('اول یک سند باز کن'); return; }
 
-    const on = setTracking(current, !isTracking(current));
+    syncLoadedTab();
+
+    if (isTracking(current)) {
+      stopTracking(current);
+      updateStatusBar();
+      toast('ردیاب خاموش شد');
+      return;
+    }
+
+    const ok = startTracking(current, current.doc.body);
     updateStatusBar();
 
-    toast(on
-      ? 'ردیاب تغییرات روشن شد — از این به بعد ویرایش‌ها را علامت بزن'
-      : 'ردیاب تغییرات خاموش شد');
+    toast(ok
+      ? 'ردیاب روشن شد — از این لحظه هر تغییری ثبت می‌شود'
+      : 'ردیاب روشن شد، ولی حافظه‌ی مرورگر پر است و نسخه‌ی مبنا ذخیره نشد');
   },
 
-  /* The page an author is sent. A .md full of {++ ++} is readable to anyone
-     who knows CriticMarkup and opaque to every writer who has just handed over
-     a story - so it becomes a page they can open on a phone. */
+  trackNote() {
+    const selected = app.editor.getSelectionText();
+    app.editor.replaceSelection(`{>>${selected || 'یادداشت'}<<}`);
+  },
+
+  acceptAll() { resolveAll('accept', false); },
+  rejectAll() { resolveAll('reject', false); },
+  acceptAllAndStop() { resolveAll('accept', true); },
+  rejectAllAndStop() { resolveAll('reject', true); },
+
+  /* The page an author is sent. A .md full of marks is readable to anyone who
+     knows CriticMarkup and opaque to every writer who has just handed over a
+     story - so it becomes a page they can open on a phone. */
   async exportReviewReport() {
     const current = tab();
     if (!current) { toast('اول یک سند باز کن'); return; }
 
     syncLoadedTab();
 
-    if (countChanges(current.doc.body) === 0) {
+    const baseline = baselineOf(current);
+    if (baseline === null) {
       await dialog.say('گزارش تغییرات',
-        'هیچ تغییر علامت‌خورده‌ای در این متن نیست. اول ردیاب را روشن کن و ویرایش‌هایت را علامت بزن.');
+        'ردیاب برای این سند روشن نشده، پس نسخه‌ای برای مقایسه وجود ندارد. '
+        + 'اول ردیاب را روشن کن، بعد ویرایش کن.');
+      return;
+    }
+
+    if (diffSummary(baseline, current.doc.body).total === 0
+        && countChanges(current.doc.body) === 0) {
+      await dialog.say('گزارش تغییرات', 'از وقتی ردیاب روشن شده، چیزی عوض نشده.');
       return;
     }
 
@@ -1040,8 +1122,9 @@ const ctx = {
 
     if (!values) return;
 
-    const { html, filename, changes } = buildReviewReport({
+    const { html, filename, changes, comments } = buildReviewReport({
       doc: current.doc,
+      baseline,
       editor: values.editor,
     });
 
@@ -1055,20 +1138,9 @@ const ctx = {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-    toast(`صفحه‌ی ${fa(changes)} تغییر ساخته شد — بفرستش برای پدیدآورنده`);
-  },
-
-  /* The selected words stay as the "before" side and the caret lands in the
-     "after" side, ready to type the replacement. */
-  trackReplace() {
-    const selected = app.editor.getSelectionText();
-    if (!selected) { toast('اول متنی را انتخاب کن که می‌خواهی عوض شود'); return; }
-    app.editor.replaceSelection(`{~~${selected}~>${selected}~~}`);
-  },
-
-  trackNote() {
-    const selected = app.editor.getSelectionText();
-    app.editor.replaceSelection(`{>>${selected || 'یادداشت'}<<}`);
+    const parts = [`${fa(changes)} تغییر`];
+    if (comments) parts.push(`${fa(comments)} یادداشت`);
+    toast(`صفحه با ${parts.join(' و ')} ساخته شد — بفرستش برای پدیدآورنده`);
   },
 
   toggleReviewPanel() {
@@ -1251,42 +1323,116 @@ async function doSaveAs() {
 function renderReview() {
   if ($('#review').hidden) return;
 
-  const body = app.editor.getText();
-  const changes = findChanges(body);
+  const current = tab();
   const list = $('#review-list');
-
-  $('#review-summary').textContent = changes.length
-    ? `${fa(changes.length)} تغییر`
-    : 'هیچ تغییر ردیابی‌شده‌ای نیست';
-  $('#review-summary').className = changes.length ? 'status--warn' : 'status--ok';
+  const summary = $('#review-summary');
 
   list.innerHTML = '';
-  if (changes.length === 0) {
-    list.innerHTML = `<p class="rv-empty">متنی را انتخاب کن و از منوی «بازبینی» علامت بزن.
-      علامت‌ها داخل خود فایل می‌مانند، پس با گیت هم دیده می‌شوند.</p>`;
+
+  if (!current) {
+    summary.textContent = 'سندی باز نیست';
+    summary.className = '';
+    setReviewButtons(false);
     return;
   }
 
-  changes.forEach((change, index) => list.appendChild(reviewRow(change, index)));
+  const baseline = baselineOf(current);
+  const body = app.editor.getText();
+  const notes = findChanges(body).filter((c) => c.type === 'comment');
+
+  if (baseline === null) {
+    summary.textContent = 'ردیاب خاموش است';
+    summary.className = '';
+    setReviewButtons(false);
+    list.innerHTML = `<p class="rv-empty">
+      ردیاب را روشن کن (<b>Ctrl+Shift+E</b>) و بعد ویرایش کن. از آن لحظه هر تغییری
+      خودش ثبت می‌شود؛ لازم نیست چیزی را دستی علامت بزنی.
+    </p>`;
+    return;
+  }
+
+  const changes = changeList(baseline, body);
+  setReviewButtons(changes.length > 0);
+
+  summary.textContent = changes.length || notes.length
+    ? `${fa(changes.length)} تغییر · ${fa(notes.length)} یادداشت`
+    : 'از وقتی ردیاب روشن شده چیزی عوض نشده';
+  summary.className = changes.length ? 'status--warn' : 'status--ok';
+
+  if (changes.length === 0 && notes.length === 0) {
+    list.innerHTML = '<p class="rv-empty">چیزی برای رسیدگی نیست.</p>';
+    return;
+  }
+
+  for (const change of changes) list.appendChild(changeRow(change));
+  for (const note of notes) list.appendChild(noteRow(note));
 }
 
-function reviewRow(change, index) {
+function setReviewButtons(enabled) {
+  for (const id of ['btn-accept-all', 'btn-reject-all', 'btn-accept-stop', 'btn-reject-stop']) {
+    const button = $(`#${id}`);
+    if (button) button.disabled = !enabled;
+  }
+}
+
+/* One row per change, each with its own accept and reject - the way Word does
+   it. A whole-document decision is the exception, not the only option. */
+function changeRow(change) {
   const row = document.createElement('div');
   row.className = 'rv-row';
 
   const kind = document.createElement('span');
-  kind.className = `rv-kind rv-kind--${change.type}`;
-  kind.textContent = change.label;
+  kind.className = `rv-kind rv-kind--${change.type === 'ins' ? 'insert' : 'delete'}`;
+  kind.textContent = change.type === 'ins' ? 'افزوده' : 'حذف';
 
   const text = document.createElement('div');
   text.className = 'rv-text';
-  if (change.type === 'substitute') {
-    text.innerHTML = `<del>${esc(change.before)}</del> ← <ins>${esc(change.after)}</ins>`;
-  } else if (change.type === 'delete') {
-    text.innerHTML = `<del>${esc(change.before)}</del>`;
-  } else {
-    text.textContent = change.after;
+  const inner = document.createElement(change.type === 'ins' ? 'ins' : 'del');
+  inner.textContent = change.text.replace(/\s+/g, ' ').trim() || '(فاصله)';
+  text.appendChild(inner);
+
+  const actions = document.createElement('div');
+  actions.className = 'rv-actions';
+
+  // Only an insertion exists in the current text, so only that one can be
+  // jumped to. A deletion is not there to scroll to.
+  if (change.type === 'ins') {
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'rv-where';
+    go.textContent = 'نشانم بده';
+    go.addEventListener('click', () => app.editor.goToOffset(change.bFrom));
+    actions.appendChild(go);
   }
+
+  const accept = document.createElement('button');
+  accept.type = 'button';
+  accept.className = 'btn btn--primary';
+  accept.textContent = 'بپذیر';
+  accept.addEventListener('click', () => resolveOne(change.index, 'accept'));
+
+  const reject = document.createElement('button');
+  reject.type = 'button';
+  reject.className = 'btn btn--outline';
+  reject.textContent = 'رد کن';
+  reject.addEventListener('click', () => resolveOne(change.index, 'reject'));
+
+  actions.append(accept, reject);
+  row.append(kind, text, actions);
+  return row;
+}
+
+function noteRow(note) {
+  const row = document.createElement('div');
+  row.className = 'rv-row';
+
+  const kind = document.createElement('span');
+  kind.className = 'rv-kind rv-kind--comment';
+  kind.textContent = 'یادداشت';
+
+  const text = document.createElement('div');
+  text.className = 'rv-text';
+  text.textContent = note.after;
 
   const actions = document.createElement('div');
   actions.className = 'rv-actions';
@@ -1294,47 +1440,91 @@ function reviewRow(change, index) {
   const where = document.createElement('button');
   where.type = 'button';
   where.className = 'rv-where';
-  where.textContent = `خط ${fa(change.line)}`;
-  where.addEventListener('click', () => app.editor.goToLine(change.line));
+  where.textContent = `خط ${fa(note.line)}`;
+  where.addEventListener('click', () => app.editor.goToLine(note.line));
 
-  const accept = document.createElement('button');
-  accept.type = 'button';
-  accept.className = 'btn btn--primary';
-  accept.textContent = 'بپذیر';
-  accept.addEventListener('click', () => applyReview(index, 'accept'));
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'btn btn--outline';
+  remove.textContent = 'حذف';
+  remove.addEventListener('click', () => {
+    const body = app.editor.getText();
+    app.editor.setText(body.slice(0, note.from) + body.slice(note.to));
+    markDirty(true);
+    refresh();
+  });
 
-  const reject = document.createElement('button');
-  reject.type = 'button';
-  reject.className = 'btn btn--outline';
-  reject.textContent = 'رد کن';
-  reject.addEventListener('click', () => applyReview(index, 'reject'));
-
-  actions.append(where, accept, reject);
+  actions.append(where, remove);
   row.append(kind, text, actions);
   return row;
 }
 
-function applyReview(index, action) {
-  app.editor.setText(resolveOne(app.editor.getText(), index, action));
-  markDirty(true);
+/* --------------------------------------------------------------------------
+   Resolving
+
+   Accepting moves the baseline forward; rejecting puts the text back. Which of
+   the two texts changes is the whole difference between them - see
+   markdown/diff.js.
+   -------------------------------------------------------------------------- */
+
+function resolveOne(index, action) {
+  const current = tab();
+  if (!current) return;
+
+  const baseline = baselineOf(current);
+  if (baseline === null) return;
+
+  const result = resolveChange(baseline, app.editor.getText(), index, action);
+
+  if (result.after !== app.editor.getText()) {
+    app.editor.setText(result.after);
+    markDirty(true);
+  }
+  rebaseline(current, result.before);
+
   refresh();
 }
 
-async function applyReviewAll(action) {
-  const count = countChanges(app.editor.getText());
-  if (count === 0) { toast('تغییری برای رسیدگی نیست'); return; }
+/**
+ * @param {'accept'|'reject'} action
+ * @param {boolean} stop  also switch tracking off, the way Word offers
+ */
+async function resolveAll(action, stop) {
+  const current = tab();
+  if (!current) return;
+
+  const baseline = baselineOf(current);
+  if (baseline === null) { toast('ردیاب روشن نیست'); return; }
+
+  syncLoadedTab();
+  const count = changeList(baseline, current.doc.body).length;
+  if (count === 0 && !stop) { toast('چیزی برای رسیدگی نیست'); return; }
 
   const yes = await dialog.ask(
-    action === 'accept' ? 'پذیرفتن همه' : 'رد کردن همه',
-    `${fa(count)} تغییر یک‌جا ${action === 'accept' ? 'پذیرفته' : 'رد'} می‌شود. با Ctrl+Z برمی‌گردد.`,
+    action === 'accept' ? 'پذیرش همه' : 'رد همه',
+    action === 'accept'
+      ? `${fa(count)} تغییر پذیرفته می‌شود. متن دست نمی‌خورد و فقط دیگر تغییر شمرده نمی‌شود.`
+      : `${fa(count)} تغییر رد می‌شود و متن به همان شکلی برمی‌گردد که ردیاب روشن شد. `
+        + 'این کار واگرد دارد، ولی هرچه از آن زمان نوشته‌ای برمی‌گردد.',
     { confirmLabel: action === 'accept' ? 'بپذیر' : 'رد کن', danger: action === 'reject' });
   if (!yes) return;
 
-  const { body } = resolveAll(app.editor.getText(), action);
-  app.editor.setText(body);
-  markDirty(true);
+  if (action === 'accept') {
+    // The new text is right, so it becomes the starting point.
+    rebaseline(current, current.doc.body);
+  } else {
+    // The old text was right, so the document goes back to it.
+    app.editor.setText(baseline);
+    markDirty(true);
+  }
+
+  if (stop) stopTracking(current);
+
   refresh();
-  toast(`${fa(count)} تغییر رسیدگی شد`);
+  updateStatusBar();
+  toast(stop
+    ? `${fa(count)} تغییر رسیدگی شد و ردیاب خاموش شد`
+    : `${fa(count)} تغییر رسیدگی شد`);
 }
 
 function openReview() {
@@ -1365,16 +1555,17 @@ function setView(mode) {
   app.view = mode;               // what was asked for
   app.effectiveView = effective; // what is on screen
 
-  const swap = $('#btn-swap');
-  if (swap) {
-    swap.textContent = effective === 'preview' ? 'متن' : 'پیش‌نمایش';
-    swap.dataset.tip = effective === 'preview' ? 'رفتن به متن' : 'رفتن به پیش‌نمایش';
-  }
 }
 
-/** The one-tap swap a phone needs, since both panes cannot be shown at once. */
-function swapView() {
-  setView(app.effectiveView === 'preview' ? 'source' : 'preview');
+/* Asking for two columns on a phone is asking for something the screen cannot
+   do. Saying so is better than silently giving something else. */
+async function requestView(mode) {
+  if (mode === 'split' && NARROW.matches) {
+    await dialog.say('دو ستونی',
+      'روی صفحه‌ی گوشی جا برای دو ستون نیست. با «فقط متن» و «فقط پیش‌نمایش» بین آن‌ها جابه‌جا شو.');
+    return;
+  }
+  setView(mode);
 }
 
 /* --------------------------------------------------------------------------
@@ -1522,11 +1713,11 @@ function boot() {
   $('#btn-usage').addEventListener('click', showUsage);
   // Two words, two doors: clicking the right half opens sign-in, the left
   // half sign-up. Signed in, the whole thing is the account menu.
-  $('#btn-swap').addEventListener('click', swapView);
-
   // Rotating the phone, or dragging a desktop window narrow, changes which
   // views are possible - so the current one is re-applied.
   NARROW.addEventListener('change', () => setView(app.view));
+
+  setupStatusMenu();
 
   $('#btn-account').addEventListener('click', (event) => {
     if (app.user) { ctx.openAccount(); return; }
@@ -1535,8 +1726,11 @@ function boot() {
   });
   $('#btn-review').addEventListener('click', () => ctx.toggleReviewPanel());
   $('#btn-review-close').addEventListener('click', closeReview);
-  $('#btn-review-accept-all').addEventListener('click', () => applyReviewAll('accept'));
-  $('#btn-review-reject-all').addEventListener('click', () => applyReviewAll('reject'));
+  $('#btn-review-report').addEventListener('click', () => ctx.exportReviewReport());
+  $('#btn-accept-all').addEventListener('click', () => resolveAll('accept', false));
+  $('#btn-reject-all').addEventListener('click', () => resolveAll('reject', false));
+  $('#btn-accept-stop').addEventListener('click', () => resolveAll('accept', true));
+  $('#btn-reject-stop').addEventListener('click', () => resolveAll('reject', true));
   $('#btn-footnotes').addEventListener('click', () => ctx.toggleFootnotePanel());
   $('#btn-sources').addEventListener('click', () => ctx.toggleSourcePanel());
   $('#btn-issues').addEventListener('click', () => { if ($('#issues').hidden) openIssues(); else closeIssues(); });
@@ -1644,6 +1838,70 @@ function boot() {
     activate(app.session.activeId);
     updateStatusBar();
   });
+}
+
+/* --------------------------------------------------------------------------
+   The status bar's overflow menu
+
+   On a phone the bar keeps only what has to be read at a glance. The rest goes
+   here - as a list with room for a full label and its current value, rather
+   than a row of half-cut words.
+   -------------------------------------------------------------------------- */
+
+function setupStatusMenu() {
+  const button = $('#btn-more');
+  const menu = $('#st-menu');
+  let unfollow = null;
+
+  const close = () => {
+    menu.hidden = true;
+    if (unfollow) { unfollow(); unfollow = null; }
+  };
+
+  const open = () => {
+    menu.innerHTML = '';
+
+    // Built from the folded items themselves, so the menu can never drift out
+    // of step with the bar.
+    for (const source of document.querySelectorAll('.statusbar .st-fold')) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'st-menu__item';
+
+      if (source.tagName === 'BUTTON') {
+        item.textContent = source.textContent;
+        item.addEventListener('click', () => { close(); source.click(); });
+      } else {
+        // A read-out rather than an action: show its label and its value.
+        item.disabled = true;
+        item.innerHTML = `<span>${esc(labelFor(source.id))}</span>` +
+          `<span class="value">${esc(source.textContent)}</span>`;
+      }
+
+      menu.appendChild(item);
+    }
+
+    menu.hidden = false;
+    place(menu, button, 'end');
+    unfollow = follow(menu, button, close);
+  };
+
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (menu.hidden) open(); else close();
+  });
+
+  document.addEventListener('click', close);
+}
+
+const STATUS_LABELS = {
+  wordcount: 'حجم متن',
+  'ids-status': 'شناسه‌ها',
+  'lint-status': 'ایرادها',
+};
+
+function labelFor(id) {
+  return STATUS_LABELS[id] || '';
 }
 
 /* Draggable divider between the two panes. */

@@ -188,6 +188,39 @@
   font-size: 0.76rem; color: var(--fg-dim);
 }
 .statusbar .spacer { margin-inline-start: auto; }
+
+/* The overflow button and its list. Desktop shows every item on the bar, so
+   the button is only there when the bar has folded. */
+.st-more {
+  display: none; align-items: center; justify-content: center;
+  width: 30px; height: 22px; flex-shrink: 0;
+  font-size: 0.9rem; line-height: 1; color: var(--fg-dim);
+  background: none; border: 1px solid var(--line); border-radius: 20px;
+  cursor: pointer;
+}
+.st-more:hover { color: var(--fg); border-color: var(--accent); }
+
+.st-menu {
+  position: fixed; z-index: 900;
+  min-width: 210px; padding: 6px;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); overflow-y: auto;
+}
+
+.st-menu__item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 11px; border: 0; border-radius: var(--radius-sm);
+  background: none; color: inherit; cursor: pointer;
+  font-family: inherit; font-size: 0.84rem; text-align: start;
+}
+.st-menu__item:hover { background: var(--accent-wash); }
+.st-menu__item .value {
+  margin-inline-start: auto; font-size: 0.74rem; color: var(--fg-dim);
+}
+.st-menu__note {
+  padding: 9px 11px; font-size: 0.8rem; color: var(--fg-dim); line-height: 1.9;
+}
 .statusbar button {
   background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
   padding: 4px 8px; border-radius: 5px;
@@ -285,14 +318,20 @@
   .app.view-preview .pane--preview { display: flex; }
   .app.view-preview .pane--source { display: none; }
 
-  /* The brand cannot be centred over a bar this crowded. */
-  .brand { position: static; transform: none; margin-inline: auto 0; }
+  /* Centred, the same as on a wide screen - it is the one fixed point on the
+     bar, and moving it about with the window is worse than losing the word
+     beside it. */
   .brand__name { display: none; }
   .brand__mark { width: 26px; height: 26px; }
 
   .titlebar { padding: 0 8px; gap: 4px; }
   .titlebar__actions .btn { padding: 6px 8px; font-size: 0.78rem; }
   .titlebar__name { max-width: 14ch; }
+
+  /* File actions at the reading edge, the account at the far edge, the mark
+     centred between them. */
+  .titlebar__account { margin-inline-start: auto; }
+  .titlebar__account .who { font-size: 0.7rem; padding: 3px 9px; }
 
   /* Labels go; the icons carry the meaning, and every one of them is also in
      a menu with its name spelled out. */
@@ -305,21 +344,17 @@
   .menu__button { padding: 0 9px; font-size: 0.78rem; }
   .menu__list { min-width: 210px; max-width: 84vw; }
 
-  .swap {
-    display: inline-flex; margin-inline-start: auto;
-    border: 1px solid var(--line); border-radius: 20px;
-    padding: 5px 14px; font-size: 0.76rem;
-  }
-  .titlebar__account { margin-inline-start: 6px; }
-
   .toolbar { padding: 0 6px; }
   .toolbar .btn--icon { width: 36px; min-height: 34px; }
 
-  /* The status bar carried nine items side by side and simply ran off the
-     edge. On a phone it keeps the two that answer "where am I" and the counts
-     that need a glance; everything else is a menu item. */
-  .statusbar { gap: 10px; }
-  #wordcount, #ids-status, #btn-stats, #btn-usage, #btn-sources, #fm-count { display: none; }
+  /* Nine items side by side simply ran off the edge. On a phone only what has
+     to be glanced at stays on the bar; everything else moves into the ⋯ menu,
+     which is a real list with room for full labels rather than a row of
+     crushed, half-cut words. */
+  .statusbar { gap: 8px; padding: 0 8px; }
+  .st-fold { display: none !important; }
+  .st-more { display: inline-flex !important; }
+  #fm-count { display: none; }
 
   .pane__head { font-size: 0.72rem; padding: 0 10px; }
 

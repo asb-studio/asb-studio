@@ -1125,7 +1125,7 @@ const ctx = {
     showWorkspace({
       currentEmail: app.user ? app.user.email : null,
       toast,
-      openDocument: ({ path, content, readOnly }) => {
+      openDocument: ({ path, content, readOnly, baseline }) => {
         const existing = app.session.tabs.find((t) => t.remotePath === path);
         if (existing) { activate(existing.id); return; }
 
@@ -1133,6 +1133,12 @@ const ctx = {
         const created = app.session.open(name, content, null);
         created.remotePath = path;
         created.readOnly = readOnly;
+
+        /* The editor's snapshot came with the document, so the same changes
+           are visible on both sides. */
+        if (baseline) startTracking(created, baseline);
+
+        activate(created.id);
         activate(created.id);
         startLockRefresh();
         watchRemote(created);
@@ -1156,7 +1162,11 @@ const ctx = {
     normalizeFrontmatter(current.doc);
 
     try {
-      await remote.writeDocument(current.remotePath, current.doc.serialize());
+      await remote.writeDocument(
+        current.remotePath,
+        current.doc.serialize(),
+        baselineOf(current)          // may be null; that is fine
+      );
       current.pushedAt = Date.now();
       markDirty(false);
       updateStatusBar();
@@ -1166,6 +1176,24 @@ const ctx = {
     }
   },
 
+  /* Handing the lock back without closing the file. Waiting for a thirty
+     minute lease to lapse, or closing a document you are still reading, is
+     not a reasonable way to pass work to somebody. */
+  async releaseLock() {
+    const current = tab();
+    if (!current || !current.remotePath) { toast('این سند در فضای مشترک نیست'); return; }
+    if (current.readOnly) { toast('قفل این سند دست تو نیست'); return; }
+
+    const yes = await dialog.ask('رها کردن قفل',
+      'دلبر می‌تواند بازش کند و ویرایش کند. تو همچنان می‌بینی‌اش، ولی تا قفل را پس نگیری نمی‌توانی ذخیره کنی.',
+      { confirmLabel: 'رها کن' });
+    if (!yes) return;
+
+    await remote.releaseDocument(current.remotePath);
+    current.readOnly = true;
+    updateStatusBar();
+    toast('قفل رها شد');
+  },
   async pushToWorkspace() {
     const current = tab();
     if (!current) { toast('اول یک سند باز کن'); return; }

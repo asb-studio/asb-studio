@@ -117,13 +117,19 @@ async function openOne(row, handlers) {
       if (!readOnly) return;
 
       dialog.close();
-      handlers.openDocument({ path: full.path, content: full.content, readOnly: true });
+      handlers.openDocument({
+        path: full.path, content: full.content,
+        baseline: full.baseline, readOnly: true,
+      });
       return;
     }
 
     await claimDocument(full.path);
     dialog.close();
-    handlers.openDocument({ path: full.path, content: full.content, readOnly: false });
+    handlers.openDocument({
+      path: full.path, content: full.content,
+      baseline: full.baseline, readOnly: false,
+    });
   } catch (err) {
     if (err && err.code === 'locked') {
       await dialog.say('این فایل باز است', err.message);
@@ -157,7 +163,7 @@ export async function pushToWorkspace(doc, fileName, content, handlers) {
        that follows then fails, what is left behind is a blank document that
        looks saved. Writing first means a failure leaves nothing at all -
        which is the honest outcome. */
-    await writeDocument(path, content);
+    await writeDocument(path, content, handlers.baseline);
     await claimDocument(path);
     handlers.toast('به فضای مشترک رفت');
     return path;

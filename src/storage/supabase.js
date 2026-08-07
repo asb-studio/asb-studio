@@ -152,7 +152,7 @@ export async function releaseDocument(path) {
  * Saves. The database refuses the write outright when somebody else holds the
  * lock, so this cannot quietly overwrite their work.
  */
-export async function writeDocument(path, content) {
+export async function writeDocument(path, content, baseline = undefined) {
   // Never write nothing. An empty save is always a bug somewhere upstream,
   // and letting it through is how a finished story became a blank row.
   if (String(content || '').trim() === '') {
@@ -163,7 +163,13 @@ export async function writeDocument(path, content) {
 
   const { data, error } = await supabase
     .from('documents')
-    .upsert({ path, content }, { onConflict: 'path' })
+    /* The baseline goes up with the text. Without it the second person gets
+       the finished document and nothing to compare it against - which is why
+       they saw no changes at all. `undefined` leaves the stored one alone. */
+    .upsert(
+      baseline === undefined ? { path, content } : { path, content, baseline },
+      { onConflict: 'path' }
+    )
     .select()
     .maybeSingle();
 

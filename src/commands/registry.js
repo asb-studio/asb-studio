@@ -123,6 +123,8 @@ export const COMMANDS = [
     tip: 'سندهای مشترک با دلبر', run: (ctx) => ctx.openWorkspace() },
   { id: 'push', menu: 'file', label: 'فرستادن به فضای مشترک', icon: 'upload',
     tip: 'این سند را در فضای مشترک بگذار', run: (ctx) => ctx.pushToWorkspace() },
+  { id: 'release-lock', menu: 'file', label: 'رها کردن قفل',
+    tip: 'تا دلبر بتواند رویش کار کند', run: (ctx) => ctx.releaseLock() },
   { id: 'push-save', menu: 'file', label: 'ذخیره در فضای مشترک', icon: 'cloudsave',
     key: 'Mod-Shift-u', tip: 'ذخیره‌ی همین لحظه در فضای مشترک (Ctrl+Shift+U)',
     run: (ctx) => ctx.saveToWorkspace() },

@@ -62,7 +62,7 @@
    phone there is no room for either. */
 .presence {
   display: flex; align-items: center; gap: 6px;
-  max-width: 40vw; overflow: hidden;
+  min-width: 0; overflow: hidden;
 }
 
 .presence__who {
@@ -71,7 +71,7 @@
   padding: 3px 9px 3px 7px;
   background: var(--panel-2); border-radius: 20px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 12ch; flex-shrink: 1; min-width: 0;
+  max-width: 11ch; flex-shrink: 1; min-width: 0;
 }
 
 .presence__dot {

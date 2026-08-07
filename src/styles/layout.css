@@ -29,20 +29,27 @@
    -------------------------------------------------------------------------- */
 
 .titlebar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 14px; position: relative;
+  /* THREE COLUMNS, NOT ABSOLUTE POSITIONING. The brand used to be taken out
+     of the flow and centred on the window, which meant nothing else knew it
+     was there - so a long name simply landed on top of it. As a grid the
+     centre column is real: the two sides get equal room and the brand keeps
+     the middle whatever they contain. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 8px;
+  padding: 0 14px;
+  height: var(--bar-h);
+  min-height: var(--bar-h);
   background: var(--panel);
   border-bottom: 1px solid var(--line-soft);
 }
 
-/* The brand is centred on the window, not on whatever is left over between
-   the two clusters of buttons - so it stays put as they change width. */
 .brand {
-  position: absolute; inset-inline-start: 50%; top: 50%;
-  transform: translate(50%, -50%);
+  grid-column: 2;
   display: flex; align-items: center; gap: 9px;
   pointer-events: none;
   white-space: nowrap;
+  justify-self: center;
 }
 
 /* The mark is inlined by ui/logo.js and inherits currentColor, so it follows
@@ -70,7 +77,32 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch;
 }
 .titlebar__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
-.titlebar__actions { display: flex; align-items: center; gap: 3px; }
+/* --------------------------------------------------------------------------
+   The two clusters either side of the brand
+
+   Column 1 holds the file actions, column 3 the account. Both may shrink;
+   neither may spill into column 2, which is what put a long name on top of
+   the horse.
+   -------------------------------------------------------------------------- */
+
+.titlebar__actions {
+  grid-column: 1;
+  display: flex; align-items: center; gap: 3px;
+  min-width: 0; justify-self: start;
+}
+
+.titlebar__account {
+  grid-column: 3;
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0; justify-self: end;
+}
+
+.titlebar__account .who {
+  max-width: 16ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+#track-light { flex-shrink: 0; }
 
 /* --------------------------------------------------------------------------
    Panes

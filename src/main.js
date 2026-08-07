@@ -1931,13 +1931,16 @@ function boot() {
   app.editor = new MarkdownEditor($('#editor'), () => {
     if (app.switching) return;   // a tab swap is not an author's edit
 
-    // Typing with every tab closed used to write into nothing. Text has to
-    // belong to a document, so one is opened for it.
+    /* Typing or pasting with no tab open used to write into nothing. Text has
+       to belong to a document, so one is made for it here rather than sitting
+       empty from boot waiting to be used. */
     if (!tab() && app.editor.getText().trim()) {
       const created = app.session.openBlank();
       created.doc.setBody(app.editor.getText());
       app.loadedId = created.id;
+      app.session.setActive(created.id);
       app.sidebar.render(created.doc);
+      app.tabs.render(app.session);
     }
 
     markDirty(true);
@@ -2130,7 +2133,10 @@ function boot() {
     }
     return restoreSession();
   }).then(() => {
-    if (app.session.count === 0) app.session.openBlank();
+    /* No blank tab on an empty start. An untitled document nobody asked for is
+       clutter, and the welcome panel says what to do far better than an empty
+       text pane does. One is opened the moment anything is typed or pasted -
+       see the editor's change handler. */
     activate(app.session.activeId);
     updateStatusBar();
   });

@@ -46,6 +46,7 @@
 
 .brand {
   grid-column: 2;
+  grid-row: 1;
   display: flex; align-items: center; gap: 9px;
   pointer-events: none;
   white-space: nowrap;
@@ -61,6 +62,8 @@
    It always matches the word beside it. */
 .brand__mark {
   width: 30px; height: 30px; flex-shrink: 0;
+  align-self: center;
+  line-height: 0; 
   display: grid; place-items: center;
   color: var(--fg);
 }
@@ -87,12 +90,14 @@
 
 .titlebar__actions {
   grid-column: 1;
+  grid-row: 1;
   display: flex; align-items: center; gap: 3px;
   min-width: 0; justify-self: start;
 }
 
 .titlebar__account {
   grid-column: 3;
+  grid-row: 1;
   display: flex; align-items: center; gap: 8px;
   min-width: 0; justify-self: end;
 }

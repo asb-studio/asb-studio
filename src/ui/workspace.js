@@ -101,6 +101,13 @@ async function openOne(row, handlers) {
     const full = await readDocument(row.path);
     if (!full) { handlers.toast('این سند دیگر آنجا نیست'); return; }
 
+    if (String(full.content || '').trim() === '') {
+      await dialog.say('این سند خالی است',
+        'در فضای مشترک برای این مسیر متنی ثبت نشده. اگر قبلاً چیزی فرستاده بودی، '
+        + 'ذخیره‌اش ناتمام مانده — نسخه‌ی روی دیسک خودت را باز کن و دوباره بفرست.');
+      return;
+    }
+
     const heldByOther = full.isLocked && full.lockedBy !== handlers.currentEmail;
 
     if (heldByOther) {
@@ -145,8 +152,13 @@ export async function pushToWorkspace(doc, fileName, content, handlers) {
   const path = values.path.trim();
 
   try {
-    await claimDocument(path);
+    /* THE TEXT GOES UP BEFORE THE LOCK, and the order matters more than it
+       looks. Claiming first creates the row with empty content; if the write
+       that follows then fails, what is left behind is a blank document that
+       looks saved. Writing first means a failure leaves nothing at all -
+       which is the honest outcome. */
     await writeDocument(path, content);
+    await claimDocument(path);
     handlers.toast('به فضای مشترک رفت');
     return path;
   } catch (err) {

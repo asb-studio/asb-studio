@@ -23,7 +23,7 @@ import { hasEmbeddedFrontmatter, liftEmbeddedFrontmatter } from './model/documen
 import { assignParagraphIds, countMissingIds } from './model/paragraph-ids.js';
 import { validateAll } from './model/validate.js';
 import { normalizeFrontmatter, previewNormalize } from './model/normalize.js';
-import { BLOCK_COLOURS, loadCategories } from './model/schema.js';
+import { BLOCK_COLOURS, loadCategories, todayJalali } from './model/schema.js';
 import { measure } from './model/stats.js';
 import { readFootnotes, nextFootnoteId } from './model/footnotes.js';
 import { UsageTracker } from './model/usage.js';
@@ -48,7 +48,7 @@ import { initTheme, nextTheme, setTheme, getTheme, getThemeLabel } from './ui/th
 import { openTableBuilder } from './ui/table-builder.js';
 import { openArchive } from './ui/archive.js';
 import { openToolbarConfig } from './ui/toolbar-config.js';
-import { place, follow } from './ui/popover.js';
+import { place, follow, claim } from './ui/popover.js';
 import { initTooltips } from './ui/tooltip.js';
 import { mountLogos } from './ui/logo.js';
 import { buildEpub } from './export/epub.js';
@@ -1188,9 +1188,17 @@ const ctx = {
       return;
     }
 
+    const fm = current.doc.frontmatter;
+
     const values = await dialog.form('گزارش برای پدیدآورنده', [
-      { name: 'editor', label: 'به نام', value: app.user ? remote.displayName(app.user) : '',
-        hint: 'زیر عنوان اثر نوشته می‌شود.' },
+      { name: 'author', label: 'پدیدآورنده', value: String(fm.get('author') || '') },
+      { name: 'translator', label: 'مترجم', value: String(fm.get('translator') || ''),
+        hint: 'خالی بگذار اگر اثر ترجمه نیست.' },
+      { name: 'editor', label: 'ویراستار',
+        value: String(fm.get('editor') || '') || (app.user ? remote.displayName(app.user) : '') },
+      { name: 'date', label: 'تاریخ ویرایش', value: todayJalali() },
+      { name: 'note', label: 'یادداشت بالای صفحه', value: '',
+        hint: 'اختیاری — چند خط برای پدیدآورنده، بالای متن.' },
     ], { confirmLabel: 'ساختن صفحه' });
 
     if (!values) return;
@@ -1199,6 +1207,10 @@ const ctx = {
       doc: current.doc,
       baseline,
       editor: values.editor,
+      author: values.author,
+      translator: values.translator,
+      date: values.date,
+      note: values.note,
     });
 
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -1933,9 +1945,12 @@ function setupStatusMenu() {
   const menu = $('#st-menu');
   let unfollow = null;
 
+  let release = null;
+
   const close = () => {
     menu.hidden = true;
     if (unfollow) { unfollow(); unfollow = null; }
+    if (release) { release(); release = null; }
   };
 
   const open = () => {
@@ -1967,6 +1982,7 @@ function setupStatusMenu() {
     menu.hidden = false;
     place(menu, button, 'end');
     unfollow = follow(menu, button, close);
+    release = claim(close);
   };
 
   button.addEventListener('click', (event) => {

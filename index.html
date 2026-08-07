@@ -11,6 +11,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="favicon.png">
   <title>استودیوی اسب</title>
 
   <!-- Vazirmatn is only the fallback. The house face is Arad, loaded from
@@ -62,6 +63,9 @@
 
       <!-- Top right, where every other tool puts it. At the foot of the
            window it was simply never noticed. -->
+      <span id="track-light" class="track-light" hidden
+            data-tip="ردیاب تغییرات روشن است (Ctrl+Shift+E)">ردیاب روشن</span>
+
       <div class="titlebar__account">
         <span id="presence" class="presence" hidden></span>
         <button id="btn-account" class="who">ورود | ثبت‌نام</button>
@@ -182,10 +186,7 @@
     <footer class="statusbar">
       <!-- Always visible: where the caret is, and whether anything is wrong.
            Everything else folds into the ⋯ button on a narrow screen. -->
-      <span id="cursor" class="st-keep">خط ۱ از ۱ · ستون ۱</span>
-      <span id="track-light" class="track-light st-keep" hidden
-            data-tip="ردیاب تغییرات روشن است (Ctrl+Shift+E)">ردیاب روشن</span>
-
+      <span id="cursor" class="st-fold">خط ۱ از ۱ · ستون ۱</span>
       <span class="st-fold" id="wordcount">۰ کلمه</span>
       <span class="st-fold status--ok" id="ids-status">همه‌ی پاراگراف‌ها شناسه دارند</span>
       <button class="st-fold" id="btn-stats" data-tip="آمار ویراستاری این متن">آمار متن</button>

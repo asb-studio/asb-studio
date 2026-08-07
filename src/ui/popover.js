@@ -82,3 +82,39 @@ export function follow(panel, trigger, onDismiss) {
     window.removeEventListener('scroll', onScroll, true);
   };
 }
+
+
+/* --------------------------------------------------------------------------
+   Only one at a time
+
+   Every popover closes on a document click, but the button that opens one
+   calls stopPropagation so its own click does not immediately shut it again -
+   which means opening a second popover never told the first to go. They ended
+   up stacked, and on a narrow screen sitting on top of each other.
+
+   So they announce themselves here instead, and opening one closes the last.
+   -------------------------------------------------------------------------- */
+
+let openPopover = null;
+
+/**
+ * @param {() => void} close  called when something else opens
+ * @returns {() => void} call when this one closes on its own
+ */
+export function claim(close) {
+  if (openPopover && openPopover !== close) openPopover();
+  openPopover = close;
+
+  return () => {
+    if (openPopover === close) openPopover = null;
+  };
+}
+
+/** Closes whatever is open. */
+export function closeAllPopovers() {
+  if (openPopover) {
+    const close = openPopover;
+    openPopover = null;
+    close();
+  }
+}

@@ -14,7 +14,7 @@
 
 import { COMMANDS, GROUPS, iconSvg } from '../commands/registry.js';
 import { loadTools } from './toolbar-config.js';
-import { place, follow } from './popover.js';
+import { place, follow, claim } from './popover.js';
 
 export class Toolbar {
   constructor(root, ctx) {
@@ -72,6 +72,7 @@ export class Toolbar {
     const closeOverflow = () => {
       morePanel.hidden = true;
       if (this._unfollow) { this._unfollow(); this._unfollow = null; }
+      if (this._release) { this._release(); this._release = null; }
     };
 
     moreButton.addEventListener('click', (event) => {
@@ -85,6 +86,7 @@ export class Toolbar {
       morePanel.dataset.align = 'end';
       place(morePanel, moreButton, 'end');
       this._unfollow = follow(morePanel, moreButton, closeOverflow);
+      this._release = claim(closeOverflow);
     });
 
     document.addEventListener('click', closeOverflow);

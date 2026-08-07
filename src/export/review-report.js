@@ -234,6 +234,28 @@ function styles() {
   h1 { font-size: 1.5rem; line-height: 1.6; margin-bottom: 8px; }
   .byline { font-size: 0.88rem; color: var(--dim); }
 
+  .credits {
+    display: grid; gap: 1px; margin: 22px 0 4px;
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+    background: var(--line);
+  }
+  .credits > div {
+    display: grid; grid-template-columns: 8.5rem 1fr;
+    background: var(--paper);
+  }
+  .credits dt {
+    padding: 10px 16px; font-size: 0.82rem; color: var(--dim);
+    background: rgba(176, 125, 0, 0.05);
+  }
+  .credits dd { padding: 10px 16px; font-size: 0.9rem; font-weight: 700; }
+
+  .note-to-author {
+    margin: 0 0 28px; padding: 16px 20px;
+    border-inline-start: 3px solid var(--ochre);
+    background: rgba(176, 125, 0, 0.05);
+    font-size: 0.9rem; line-height: 2;
+  }
+
   /* --- the two views ---------------------------------------------------- */
   .views {
     display: flex; gap: 6px; justify-content: center;
@@ -347,6 +369,8 @@ function styles() {
     h1 { font-size: 1.2rem; }
     article { font-size: 1rem; }
     .views button { padding: 7px 15px; font-size: .78rem; }
+    .credits > div { grid-template-columns: 6.5rem 1fr; }
+    .credits dt, .credits dd { padding: 8px 12px; font-size: 0.8rem; }
   }
 
   @media print {
@@ -395,15 +419,21 @@ const SCRIPT = `
  * Builds the page.
  *
  * @param {object} options
- *   doc      the AsbDocument as it stands now
- *   baseline the text as it was when tracking was switched on
- *   editor   the name to sign the changes with
+ *   doc        the AsbDocument as it stands now
+ *   baseline   the text as it was when tracking was switched on
+ *   editor     who did the editing
+ *   author     the author's name, overriding the frontmatter
+ *   translator the translator's name, overriding the frontmatter
+ *   date       the date of the pass, already written out in Persian
+ *   note       a line to the author, above the text
  */
-export function buildReviewReport({ doc, baseline, editor = '' }) {
+export function buildReviewReport({
+  doc, baseline, editor = '', author = null, translator = null, date = '', note = '',
+}) {
   const fm = doc.frontmatter;
   const title = String(fm.get('title') || 'بدون عنوان');
-  const author = String(fm.get('author') || '');
-  const translator = String(fm.get('translator') || '');
+  const theAuthor = author === null ? String(fm.get('author') || '') : String(author);
+  const theTranslator = translator === null ? String(fm.get('translator') || '') : String(translator);
   const slug = String(fm.get('slug') || 'review');
 
   const before = baseline === null || baseline === undefined ? doc.body : baseline;
@@ -414,11 +444,14 @@ export function buildReviewReport({ doc, baseline, editor = '' }) {
   );
   const comments = findChanges(doc.body).filter((c) => c.type === 'comment').length;
 
-  const byline = [
-    author && `نوشته‌ی ${esc(author)}`,
-    translator && `ترجمه‌ی ${esc(translator)}`,
-    editor && `ویرایش ${esc(editor)}`,
-  ].filter(Boolean).join(' · ');
+  /* Each credit on its own line rather than run together: an author reading
+     this wants to see their own name, not hunt for it in a string. */
+  const credits = [
+    theAuthor && ['پدیدآورنده', theAuthor],
+    theTranslator && ['مترجم', theTranslator],
+    editor && ['ویراستار', editor],
+    date && ['تاریخ ویرایش', date],
+  ].filter(Boolean);
 
   const tally = [
     summary.added && `<span>افزوده: ${fa(summary.added)} کلمه</span>`,
@@ -440,8 +473,12 @@ export function buildReviewReport({ doc, baseline, editor = '' }) {
   <header>
     <div class="mark">${HORSE}</div>
     <h1>${esc(title)}</h1>
-    ${byline ? `<p class="byline">${byline}</p>` : ''}
   </header>
+
+  ${credits.length ? `<dl class="credits">
+    ${credits.map(([label, value]) =>
+      `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('')}
+  </dl>` : ''}
 
   <div class="views">
     <button type="button" data-view="marked" aria-pressed="true">نمایش تغییرات</button>
@@ -470,6 +507,8 @@ export function buildReviewReport({ doc, baseline, editor = '' }) {
       هیچ‌چیز بدون تأیید شما نهایی نمی‌شود.
     </p>
   </section>
+
+  ${note ? `<section class="note-to-author"><p>${esc(note)}</p></section>` : ''}
 
   <article>
 ${render(markedSource(before, doc.body))}

@@ -331,8 +331,14 @@
 
   /* File actions at the reading edge, the account at the far edge, the mark
      centred between them. */
-  .titlebar__account { margin-inline-start: auto; }
   .titlebar__account .who { font-size: 0.7rem; padding: 3px 9px; }
+
+  /* On a phone the light keeps its dot and drops its words. */
+  #track-light {
+    font-size: 0; gap: 0; padding: 5px;
+    border-radius: 50%;
+  }
+  #track-light::before { margin: 0; }
 
   /* Labels go; the icons carry the meaning, and every one of them is also in
      a menu with its name spelled out. */
@@ -352,21 +358,37 @@
      to be glanced at stays on the bar; everything else moves into the ⋯ menu,
      which is a real list with room for full labels rather than a row of
      crushed, half-cut words. */
-  /* One line, three things: where the caret is, whether the tracker is on,
-     and how many issues there are. Everything else is behind the ⋯ button,
-     which is a real list with room for full labels. */
-  .statusbar { gap: 6px; padding: 0 8px; font-size: 0.7rem; }
+  /* ONE ROW, THREE THINGS, NO WRAPPING AND NO SCROLLING.
+
+     A status bar that wraps onto a second line, or scrolls sideways with half
+     a word showing at the edge, is worse than no status bar: you cannot tell
+     what is there without going looking. So on a phone it carries only what
+     has to be seen without asking - is the tracker running, and is anything
+     wrong - and the ⋯ button holds everything else as a proper list.
+
+     Nothing here may wrap; the row is a fixed height and its contents shrink
+     to fit it. */
+  .statusbar {
+    gap: 8px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
   .st-fold { display: none !important; }
-  .st-more { display: inline-flex !important; }
+  .st-more { display: inline-flex !important; order: -1; }
   #fm-count { display: none; }
-  #cursor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .statusbar .track-light { padding: 2px 8px; font-size: 0.66rem; }
-  #btn-issues { flex-shrink: 0; }
+
+  /* What is left on the bar: the ⋯ button and the issue count. Two things,
+     both readable, neither able to wrap. */
+  #btn-issues {
+    flex-shrink: 0;
+    padding: 4px 12px; border-radius: 20px;
+    border: 1px solid var(--line);
+  }
 
   .pane__head { font-size: 0.72rem; padding: 0 10px; }
-
-  .statusbar { gap: 8px; padding: 0 8px; font-size: 0.7rem; overflow-x: auto; }
-  .statusbar button { padding: 4px 6px; }
 
   /* A drawer on a small screen takes the room it needs. */
   .app { --drawer-h: 0px; }

@@ -86,14 +86,6 @@ export async function updateName(name) {
   if (error) throw error;
 }
 
-export async function signOut() {
-  await supabase.auth.signOut();
-}
-
-export function onAuthChange(fn) {
-  supabase.auth.onAuthStateChange((_event, session) => fn(session ? session.user : null));
-}
-
 /* --------------------------------------------------------------------------
    Documents
    -------------------------------------------------------------------------- */
@@ -131,7 +123,7 @@ export async function readDocument(path) {
  * Takes the lock, creating the row if this is a new path.
  * @throws when somebody else holds a live lock
  */
-export async function claimDocument(path, minutes = LOCK_MINUTES) {
+export async function claimDocument(path, minutes = LOCK_MINUTES, content = null) {
   const { data, error } = await supabase.rpc('claim_document', {
     doc_path: path,
     minutes,
@@ -161,6 +153,14 @@ export async function releaseDocument(path) {
  * lock, so this cannot quietly overwrite their work.
  */
 export async function writeDocument(path, content) {
+  // Never write nothing. An empty save is always a bug somewhere upstream,
+  // and letting it through is how a finished story became a blank row.
+  if (String(content || '').trim() === '') {
+    const err = new Error('متن خالی است و ذخیره نشد.');
+    err.code = 'empty';
+    throw err;
+  }
+
   const { data, error } = await supabase
     .from('documents')
     .upsert({ path, content }, { onConflict: 'path' })
@@ -170,7 +170,9 @@ export async function writeDocument(path, content) {
   if (error) {
     // RLS refusing an update surfaces as zero rows affected rather than a
     // permission error, so the message has to be made useful here.
-    const err = new Error('ذخیره نشد — احتمالاً این فایل دست کس دیگری باز است.');
+    const err = new Error(
+      `ذخیره نشد: ${error.message || 'خطای ناشناخته'}`
+      + ' — اگر تازه پایگاه‌داده را ساخته‌ای، فایل supabase/02-fix-empty-save.sql را اجرا کن.');
     err.code = 'denied';
     err.cause = error;
     throw err;
@@ -182,6 +184,24 @@ export async function writeDocument(path, content) {
 export async function deleteDocument(path) {
   const { error } = await supabase.from('documents').delete().eq('path', path);
   if (error) throw error;
+}
+
+/* --------------------------------------------------------------------------
+   Leaving
+
+   These two have now gone missing twice in edits to this file, each time
+   taking the whole app down at boot, because main.js imports them by name and
+   a missing named export is a load-time failure, not a runtime one. Keeping
+   them under their own heading makes them harder to sweep away with a
+   neighbouring block.
+   -------------------------------------------------------------------------- */
+
+export async function signOut() {
+  await supabase.auth.signOut();
+}
+
+export function onAuthChange(fn) {
+  supabase.auth.onAuthStateChange((_event, session) => fn(session ? session.user : null));
 }
 
 /* --------------------------------------------------------------------------

@@ -12,7 +12,7 @@
    ========================================================================== */
 
 import { MENUS, commandsInMenu, iconSvg } from '../commands/registry.js';
-import { place, follow } from './popover.js';
+import { place, follow, claim } from './popover.js';
 
 const KEY_LABELS = {
   'Mod-b': 'Ctrl+B', 'Mod-i': 'Ctrl+I', 'Mod-k': 'Ctrl+K',
@@ -149,12 +149,15 @@ export class MenuBar {
     // scrolls or wraps cannot clip the list. See ui/popover.js.
     place(list, button, 'start');
     this._unfollow = follow(list, button, () => this.closeAll());
+    // Anything else that is open steps aside; see ui/popover.js.
+    this._release = claim(() => this.closeAll());
 
     this.open = wrap;
   }
 
   closeAll() {
     if (this._unfollow) { this._unfollow(); this._unfollow = null; }
+    if (this._release) { this._release(); this._release = null; }
 
     for (const wrap of this.root.querySelectorAll('.menu')) {
       wrap.classList.remove('is-open');

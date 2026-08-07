@@ -138,6 +138,7 @@
   padding: 10px 6px; border-bottom: 1px solid var(--line-soft);
 }
 .rv-row:last-child { border-bottom: 0; }
+.rv-row--at { background: var(--accent-wash); border-radius: var(--radius-sm); }
 
 .rv-kind {
   font-size: 0.7rem; font-weight: 700; padding: 4px 8px;
@@ -271,3 +272,19 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+
+
+/* --------------------------------------------------------------------------
+   Replies from the author
+   -------------------------------------------------------------------------- */
+
+.reply {
+  padding: 11px 0; border-bottom: 1px solid var(--line-soft);
+}
+.reply:last-child { border-bottom: 0; }
+.reply__quote {
+  font-size: 0.76rem; color: var(--fg-faint); line-height: 1.8;
+  margin-bottom: 5px; padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--line);
+}
+.reply__text { font-size: 0.86rem; line-height: 1.95; }

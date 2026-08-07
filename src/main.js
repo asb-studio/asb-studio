@@ -42,6 +42,7 @@ import { Sidebar } from './ui/sidebar.js';
 import { Tabs } from './ui/tabs.js';
 import { FootnotePanel } from './ui/footnotes.js';
 import { SourcePanel } from './ui/sources.js';
+import { FindPanel } from './ui/find.js';
 import { Toolbar, bindAppShortcuts, editorShortcuts } from './ui/toolbar.js';
 import { MenuBar } from './ui/menubar.js';
 import { initTheme, nextTheme, setTheme, getTheme, getThemeLabel } from './ui/theme.js';
@@ -104,6 +105,7 @@ const app = {
   tabs: null,
   footnotes: null,
   sources: null,
+  find: null,
   usage: new UsageTracker(),
   menubar: null,
   toolbar: null,
@@ -494,6 +496,46 @@ function activate(id) {
    otherwise a long editing session would expire under the author.
    -------------------------------------------------------------------------- */
 
+/* --------------------------------------------------------------------------
+   The other person's saves
+
+   A read-only view is a photograph of the moment it opened, which is no use
+   when the point is watching someone work. So the row is watched, and when
+   they save it arrives here.
+
+   A viewer is updated in place. Someone holding the lock is only told - their
+   own text must never be replaced under their hands.
+   -------------------------------------------------------------------------- */
+
+function watchRemote(target) {
+  if (!target.remotePath) return;
+
+  remote.watchDocument(target.remotePath, (row) => {
+    const who = String(row.updated_email || '').split('@')[0];
+
+    if (target.readOnly) {
+      const isShowing = tab() && tab().id === target.id;
+      const caret = isShowing ? app.editor.getCaret() : target.caret;
+
+      target.doc = parseDocument(row.content);
+
+      if (isShowing) {
+        app.switching = true;
+        app.editor.setText(target.doc.body);
+        app.editor.setCaret(caret);
+        app.sidebar.render(target.doc);
+        app.switching = false;
+        refresh();
+      }
+
+      toast(`${who} ذخیره کرد — متن به‌روز شد`);
+      return;
+    }
+
+    toast(`${who} همین سند را در فضای مشترک ذخیره کرد`);
+  });
+}
+
 function startLockRefresh() {
   if (app.lockTimer) return;
 
@@ -559,6 +601,24 @@ function disposablePlaceholder() {
 
 async function closeTab(id) {
   const target = app.session.tabs.find((t) => t.id === id);
+
+  /* A shared document that has changed since it was last sent is the one case
+     worth stopping for: the other person is looking at the old text. */
+  if (target && target.remotePath && !target.readOnly && target.dirty) {
+    const answer = await dialog.custom('این سند در فضای مشترک است',
+      Object.assign(document.createElement('div'), {
+        innerHTML: '<p class="dialog__text">از آخرین باری که فرستادی، متن عوض شده.'
+          + ' اگر ببندی، دلبر همان نسخه‌ی قدیمی را می‌بیند.</p>',
+      }),
+      [
+        { label: 'بستن بدون ذخیره', value: 'close', danger: true },
+        { label: 'انصراف', value: null, cancel: true },
+        { label: 'ذخیره و ببند', value: 'save', primary: true },
+      ]);
+
+    if (answer === null) return;
+    if (answer === 'save') await ctx.saveToWorkspace();
+  }
   if (!target) return;
 
   if (target.dirty) {
@@ -570,8 +630,9 @@ async function closeTab(id) {
 
   // Hand the lock back, so the other person is not left waiting on a tab
   // that is not even open any more.
-  if (target.remotePath && !target.readOnly) {
-    remote.releaseDocument(target.remotePath).catch(() => {});
+  if (target.remotePath) {
+    remote.unwatchDocument(target.remotePath);
+    if (!target.readOnly) remote.releaseDocument(target.remotePath).catch(() => {});
   }
 
   const wasActive = app.session.activeId === id;
@@ -650,6 +711,12 @@ const ctx = {
     if (!app.footnotes.isOpen) closeOtherDrawers('footnotes');
     app.footnotes.toggle();
     $('#btn-footnotes').setAttribute('aria-pressed', String(app.footnotes.isOpen));
+    syncDrawerHeight();
+  },
+
+  openFind() {
+    if (!app.find.isOpen) closeOtherDrawers('find');
+    app.find.toggle(app.editor.getSelectionText());
     syncDrawerHeight();
   },
 
@@ -1068,10 +1135,35 @@ const ctx = {
         created.readOnly = readOnly;
         activate(created.id);
         startLockRefresh();
+        watchRemote(created);
 
         toast(readOnly ? `${name} — فقط خواندنی` : `${name} باز شد`);
       },
     });
+  },
+
+  /* Saving to the workspace is deliberate, not automatic. Every save is a
+     request against a free-tier quota, and a timer spending it while nobody is
+     typing is spending it on nothing. Ctrl+Shift+U, when you decide. */
+  async saveToWorkspace() {
+    const current = tab();
+    if (!current) { toast('اول یک سند باز کن'); return; }
+
+    if (!current.remotePath) { ctx.pushToWorkspace(); return; }
+    if (current.readOnly) { toast('این سند فقط خواندنی است'); return; }
+
+    syncLoadedTab();
+    normalizeFrontmatter(current.doc);
+
+    try {
+      await remote.writeDocument(current.remotePath, current.doc.serialize());
+      current.pushedAt = Date.now();
+      markDirty(false);
+      updateStatusBar();
+      toast('در فضای مشترک ذخیره شد');
+    } catch (err) {
+      dialog.say('ذخیره نشد', String(err.message || err));
+    }
   },
 
   async pushToWorkspace() {
@@ -1091,6 +1183,7 @@ const ctx = {
     current.readOnly = false;
     markDirty(false);
     startLockRefresh();
+    watchRemote(current);
     updateStatusBar();
   },
 
@@ -1191,6 +1284,8 @@ const ctx = {
     const fm = current.doc.frontmatter;
 
     const values = await dialog.form('گزارش برای پدیدآورنده', [
+      { name: 'title', label: 'عنوان صفحه', value: String(fm.get('title') || ''),
+        hint: 'بالای گزارش می‌نشیند. می‌تواند با عنوان اثر فرق کند.' },
       { name: 'author', label: 'پدیدآورنده', value: String(fm.get('author') || '') },
       { name: 'translator', label: 'مترجم', value: String(fm.get('translator') || ''),
         hint: 'خالی بگذار اگر اثر ترجمه نیست.' },
@@ -1206,6 +1301,7 @@ const ctx = {
     const { html, filename, changes, comments } = buildReviewReport({
       doc: current.doc,
       baseline,
+      title: values.title,
       editor: values.editor,
       author: values.author,
       translator: values.translator,
@@ -1226,6 +1322,69 @@ const ctx = {
     const parts = [`${fa(changes)} تغییر`];
     if (comments) parts.push(`${fa(comments)} یادداشت`);
     toast(`صفحه با ${parts.join(' و ')} ساخته شد — بفرستش برای پدیدآورنده`);
+  },
+
+  /* The replies the author sent back. The report page cannot post anywhere -
+     it is a file on their machine - so it hands them a small file instead,
+     and this reads it. No server, no account, nothing to keep running. */
+  async importReplies() {
+    const current = tab();
+    if (!current) { toast('اول همان سندی را باز کن که گزارشش را فرستادی'); return; }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+
+    const file = await new Promise((resolve) => {
+      input.addEventListener('change', () => resolve(input.files[0] || null));
+      input.click();
+    });
+    if (!file) return;
+
+    let payload;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      dialog.say('خوانده نشد', 'این فایل، فایل نظرهای پدیدآورنده نیست.');
+      return;
+    }
+
+    if (!payload || payload.kind !== 'asb-review-replies' || !Array.isArray(payload.replies)) {
+      dialog.say('خوانده نشد', 'این فایل، فایل نظرهای پدیدآورنده نیست.');
+      return;
+    }
+
+    if (payload.replies.length === 0) {
+      dialog.say('نظرها', 'پدیدآورنده یادداشتی ننوشته.');
+      return;
+    }
+
+    const node = document.createElement('div');
+    node.innerHTML = `
+      <p class="dialog__text">${fa(payload.replies.length)} یادداشت از پدیدآورنده:</p>
+      ${payload.replies.map((r) => `
+        <div class="reply">
+          <div class="reply__quote">${esc(r.quote || '')}</div>
+          <div class="reply__text">${esc(r.text)}</div>
+        </div>`).join('')}`;
+
+    const go = await dialog.custom('نظرهای پدیدآورنده', node, [
+      { label: 'بستن', value: false, cancel: true },
+      { label: 'درج در متن به شکل یادداشت', value: true, primary: true },
+    ], { wide: true });
+    if (!go) return;
+
+    /* Appended rather than threaded into the text: the paragraph numbers in
+       the report belong to the version that was sent, and the text has moved
+       on since. The quote is what actually locates each one. */
+    const block = payload.replies
+      .map((r) => `{>>پدیدآورنده — «${String(r.quote || '').slice(0, 60)}»: ${r.text}<<}`)
+      .join('\n\n');
+
+    app.editor.appendDefinition(`\n${block}`);
+    markDirty(true);
+    refresh();
+    toast(`${fa(payload.replies.length)} یادداشت درج شد`);
   },
 
   toggleReviewPanel() {
@@ -1455,8 +1614,35 @@ function renderReview() {
   for (const note of notes) list.appendChild(noteRow(note));
 }
 
+/* Which change the Previous / Next buttons are sitting on. Word keeps the
+   same idea: you walk the changes rather than hunting for them. */
+let reviewCursor = 0;
+
+function stepReview(delta) {
+  const current = tab();
+  const baseline = current ? baselineOf(current) : null;
+  if (baseline === null) return;
+
+  const changes = changeList(baseline, app.editor.getText());
+  if (changes.length === 0) { toast('تغییری نیست'); return; }
+
+  reviewCursor = (reviewCursor + delta + changes.length) % changes.length;
+  const change = changes[reviewCursor];
+
+  // Only an insertion exists in the current text; a deletion is not there to
+  // scroll to, so the caret goes to where it was taken out.
+  app.editor.goToOffset(change.bFrom);
+
+  const rows = $('#review-list').querySelectorAll('.rv-row');
+  rows.forEach((row, i) => row.classList.toggle('rv-row--at', i === reviewCursor));
+  if (rows[reviewCursor]) rows[reviewCursor].scrollIntoView({ block: 'nearest' });
+
+  toast(`تغییر ${fa(reviewCursor + 1)} از ${fa(changes.length)}`);
+}
+
 function setReviewButtons(enabled) {
-  for (const id of ['btn-accept-all', 'btn-reject-all', 'btn-accept-stop', 'btn-reject-stop']) {
+  for (const id of ['btn-accept-all', 'btn-reject-all', 'btn-accept-stop', 'btn-reject-stop',
+                    'btn-prev-change', 'btn-next-change']) {
     const button = $(`#${id}`);
     if (button) button.disabled = !enabled;
   }
@@ -1569,6 +1755,9 @@ function resolveOne(index, action) {
   }
   rebaseline(current, result.before);
 
+  const left = changeList(result.before, result.after).length;
+  if (reviewCursor >= left) reviewCursor = Math.max(0, left - 1);
+
   refresh();
 }
 
@@ -1675,6 +1864,7 @@ function closeOtherDrawers(keep) {
     app.footnotes.close();
     $('#btn-footnotes').setAttribute('aria-pressed', 'false');
   }
+  if (keep !== 'find' && app.find && app.find.isOpen) app.find.close();
   if (keep !== 'sources' && app.sources && app.sources.isOpen) {
     app.sources.close();
     $('#btn-sources').setAttribute('aria-pressed', 'false');
@@ -1701,6 +1891,7 @@ function closeIssues() {
 function syncDrawerHeight() {
   const open = !$('#issues').hidden
     || !$('#review').hidden
+    || (app.find && app.find.isOpen)
     || (app.footnotes && app.footnotes.isOpen)
     || (app.sources && app.sources.isOpen);
   setDrawerHeight(open);
@@ -1782,6 +1973,14 @@ function boot() {
 
   app.sources = new SourcePanel($('#sources'), panelHandlers);
 
+  app.find = new FindPanel($('#find'), {
+    onClose: () => { closeOtherDrawers(null); syncDrawerHeight(); },
+    getText: () => app.editor.getText(),
+    setText: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
+    goTo: (from, to) => app.editor.select(from, to),
+    toast,
+  });
+
   app.footnotes = new FootnotePanel($('#footnotes'), panelHandlers);
 
   app.menubar = new MenuBar($('#menubar'), ctx);
@@ -1819,6 +2018,8 @@ function boot() {
   $('#btn-review').addEventListener('click', () => ctx.toggleReviewPanel());
   $('#btn-review-close').addEventListener('click', closeReview);
   $('#btn-review-report').addEventListener('click', () => ctx.exportReviewReport());
+  $('#btn-prev-change').addEventListener('click', () => stepReview(-1));
+  $('#btn-next-change').addEventListener('click', () => stepReview(1));
   $('#btn-accept-all').addEventListener('click', () => resolveAll('accept', false));
   $('#btn-reject-all').addEventListener('click', () => resolveAll('reject', false));
   $('#btn-accept-stop').addEventListener('click', () => resolveAll('accept', true));
@@ -1837,6 +2038,7 @@ function boot() {
       if (shortcuts.isOpen()) { shortcuts.close(); return; }
       if (panelIsOpen()) { closePanel(); return; }
       if (!$('#review').hidden) { closeReview(); return; }
+      if (app.find.isOpen) { ctx.openFind(); return; }
       if (app.sources.isOpen) { ctx.toggleSourcePanel(); return; }
       if (app.footnotes.isOpen) { ctx.toggleFootnotePanel(); return; }
       if (!$('#issues').hidden) { closeIssues(); return; }
@@ -1886,6 +2088,7 @@ function boot() {
     else if (e.shiftKey && code === 'KeyF') { e.preventDefault(); ctx.toggleFootnotePanel(); }
     else if (e.shiftKey && code === 'KeyR') { e.preventDefault(); ctx.toggleReviewPanel(); }
     else if (e.shiftKey && code === 'KeyE') { e.preventDefault(); ctx.toggleTracking(); }
+    else if (e.shiftKey && code === 'KeyU') { e.preventDefault(); ctx.saveToWorkspace(); }
     else if (e.shiftKey && code === 'KeyS') { e.preventDefault(); doSaveAs(); }
     else if (code === 'KeyS') { e.preventDefault(); doSave(); }
     else if (code === 'KeyO') { e.preventDefault(); doOpen(); }
@@ -1907,6 +2110,7 @@ function boot() {
     syncLoadedTab();
     files.saveSession(app.session.snapshot());
     releaseAllLocks();
+    remote.unwatchAll();
     remote.leavePresence();
     if (!app.session.hasUnsaved) return;
     e.preventDefault();

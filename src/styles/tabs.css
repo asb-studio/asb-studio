@@ -154,3 +154,41 @@
   border: 1px solid var(--warn); border-radius: var(--radius-sm);
 }
 .fn-empty { font-size: 0.82rem; color: var(--fg-dim); padding: 18px 6px; text-align: center; }
+
+/* --------------------------------------------------------------------------
+   Find and replace
+   -------------------------------------------------------------------------- */
+
+.control--find { width: 15ch; padding: 5px 9px; font-size: 0.8rem; }
+
+.find-opt {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.75rem; color: var(--fg-dim); white-space: nowrap; cursor: pointer;
+}
+
+.find-row {
+  display: grid; grid-template-columns: 3.5rem 1fr; gap: 10px; align-items: baseline;
+  width: 100%; padding: 8px 6px; border: 0; border-bottom: 1px solid var(--line-soft);
+  background: none; color: var(--fg); cursor: pointer;
+  font-family: inherit; font-size: 0.83rem; text-align: start;
+}
+.find-row:hover { background: var(--panel-2); }
+.find-row--at { background: var(--accent-wash); }
+
+.find-row__line {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--fg-faint);
+  direction: ltr; unicode-bidi: isolate;
+}
+.find-row__text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg-dim);
+}
+.find-row__text mark {
+  background: var(--accent-wash); color: var(--accent-strong);
+  font-weight: 700; border-radius: 3px; padding: 0 2px;
+}
+
+@media (max-width: 820px) {
+  .control--find { width: 10ch; }
+  .find-opt { display: none; }
+}

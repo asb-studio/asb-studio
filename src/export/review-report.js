@@ -178,6 +178,16 @@ function render(source) {
       + html.slice(end + 1);
   }
 
+  /* Every paragraph is given a number so a reply can name the place it is
+     about. The permanent #p- ids would be better, but a paragraph the editor
+     added has none - and a reply that cannot say where it belongs is a reply
+     nobody can act on. */
+  let blockIndex = 0;
+  html = html.replace(/<(p|h1|h2|h3|blockquote)(\s|>)/g, (whole, tag, tail) => {
+    blockIndex++;
+    return `<${tag} data-block="${blockIndex}"${tail}`;
+  });
+
   // Footnotes, in the shape the site uses.
   html = html.replace(/(<a class="footnote-ref"[^>]*>)(\d+)(<\/a>)/g,
     (_, open, digits, close) => open + fa(digits) + close);
@@ -352,6 +362,48 @@ function styles() {
   body.clean ins.c-ins { background: none; color: inherit; text-decoration: none; padding: 0; }
   body.clean del.c-del { display: none; }
 
+  /* --- the author's replies -------------------------------------------- */
+  .reply-btn {
+    display: block; margin: 6px 0 0 auto;
+    font: inherit; font-size: .74rem; color: var(--dim);
+    background: none; border: 1px dashed var(--line); border-radius: 20px;
+    padding: 3px 12px; cursor: pointer;
+  }
+  .reply-btn:hover { border-color: var(--ochre); color: var(--ochre); }
+  .reply-btn.has { border-style: solid; border-color: var(--ochre); color: var(--ochre); }
+
+  .reply-box {
+    margin: 8px 0 4px; padding: 12px 14px;
+    background: rgba(176,125,0,.06);
+    border-inline-start: 3px solid var(--ochre); border-radius: 0 8px 8px 0;
+  }
+  .reply-box textarea {
+    width: 100%; min-height: 68px; resize: vertical;
+    font: inherit; font-size: .88rem; line-height: 1.9;
+    color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px;
+  }
+  .reply-box .row { display: flex; gap: 8px; margin-top: 8px; }
+  .reply-box button {
+    font: inherit; font-size: .78rem; padding: 6px 16px;
+    border-radius: 6px; cursor: pointer;
+    background: var(--ochre); color: #fff; border: 0;
+  }
+  .reply-box button.quiet { background: none; color: var(--dim); border: 1px solid var(--line); }
+
+  .replies-bar {
+    position: sticky; bottom: 0; z-index: 10;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 30px -44px -50px; padding: 14px 44px;
+    background: var(--paper); border-top: 1px solid var(--line);
+    font-size: .84rem; color: var(--dim);
+  }
+  .replies-bar button {
+    font: inherit; padding: 8px 18px; border-radius: 8px; cursor: pointer;
+    background: var(--ochre); color: #fff; border: 0; font-weight: 700;
+  }
+  .replies-bar button.quiet { background: none; color: var(--dim); border: 1px solid var(--line); font-weight: 400; }
+
   .footnote { margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid var(--line); font-size: .9rem; color: var(--dim); }
   .footnote h3 { font-size: 1rem; margin-bottom: 1rem; }
   .footnote li { margin-bottom: .7em; }
@@ -369,6 +421,7 @@ function styles() {
     h1 { font-size: 1.2rem; }
     article { font-size: 1rem; }
     .views button { padding: 7px 15px; font-size: .78rem; }
+    .replies-bar { margin: 24px -20px -36px; padding: 12px 20px; }
     .credits > div { grid-template-columns: 6.5rem 1fr; }
     .credits dt, .credits dd { padding: 8px 12px; font-size: 0.8rem; }
   }
@@ -386,23 +439,24 @@ function styles() {
 
 const SCRIPT = `
 (function () {
-  // Two views, one page. Nothing is fetched and nothing is rebuilt - the
-  // marks are already in the document and CSS decides what shows.
   var body = document.body;
-  var buttons = document.querySelectorAll('[data-view]');
+
+  /* --- the two views ---------------------------------------------------- */
+  var viewButtons = document.querySelectorAll('[data-view]');
 
   function show(view) {
     body.classList.toggle('clean', view === 'clean');
-    buttons.forEach(function (b) {
+    viewButtons.forEach(function (b) {
       b.setAttribute('aria-pressed', String(b.dataset.view === view));
     });
   }
 
-  buttons.forEach(function (b) {
+  viewButtons.forEach(function (b) {
     b.addEventListener('click', function () { show(b.dataset.view); });
   });
+  show('marked');
 
-  // One comment open at a time, and a tap anywhere else closes it.
+  /* --- the editor's comments -------------------------------------------- */
   document.addEventListener('click', function (event) {
     var note = event.target.closest('.c-note');
     document.querySelectorAll('.c-note.open').forEach(function (n) {
@@ -411,7 +465,119 @@ const SCRIPT = `
     if (note) note.classList.toggle('open');
   });
 
-  show('marked');
+  /* --- the author's replies ---------------------------------------------
+     Kept in this browser while the page is open, so a long read can be put
+     down and picked up. Sending is a download, because there is no server on
+     the other end of this file - and a file is something an author already
+     knows how to send back. */
+  var KEY = 'asb-review:' + (document.title || 'review');
+  var replies = {};
+
+  try { replies = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { replies = {}; }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(replies)); } catch (e) {}
+    refreshBar();
+  }
+
+  var bar = document.getElementById('replies-bar');
+  var count = document.getElementById('replies-count');
+
+  function refreshBar() {
+    var n = Object.keys(replies).filter(function (k) { return replies[k].trim(); }).length;
+    bar.hidden = n === 0;
+    count.textContent = n === 0 ? '' : n + ' یادداشت نوشته‌اید';
+
+    document.querySelectorAll('.reply-btn').forEach(function (b) {
+      var has = (replies[b.dataset.for] || '').trim() !== '';
+      b.classList.toggle('has', has);
+      b.textContent = has ? 'یادداشت شما ✓' : 'یادداشت';
+    });
+  }
+
+  document.querySelectorAll('article [data-block]').forEach(function (block) {
+    var id = block.dataset.block;
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'reply-btn';
+    button.dataset.for = id;
+    button.textContent = 'یادداشت';
+    block.insertAdjacentElement('afterend', button);
+
+    button.addEventListener('click', function () {
+      if (button.nextElementSibling && button.nextElementSibling.classList.contains('reply-box')) {
+        button.nextElementSibling.remove();
+        return;
+      }
+
+      var box = document.createElement('div');
+      box.className = 'reply-box';
+
+      var area = document.createElement('textarea');
+      area.value = replies[id] || '';
+      area.placeholder = 'نظرتان درباره‌ی این بخش…';
+
+      var row = document.createElement('div');
+      row.className = 'row';
+
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.textContent = 'ثبت';
+      ok.addEventListener('click', function () {
+        if (area.value.trim()) replies[id] = area.value.trim();
+        else delete replies[id];
+        save();
+        box.remove();
+      });
+
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'quiet';
+      cancel.textContent = 'انصراف';
+      cancel.addEventListener('click', function () { box.remove(); });
+
+      row.appendChild(ok);
+      row.appendChild(cancel);
+      box.appendChild(area);
+      box.appendChild(row);
+      button.insertAdjacentElement('afterend', box);
+      area.focus();
+    });
+  });
+
+  document.getElementById('btn-send-replies').addEventListener('click', function () {
+    var payload = {
+      kind: 'asb-review-replies',
+      title: document.title.replace(' — نشر اسب', ''),
+      slug: body.dataset.slug || '',
+      at: new Date().toISOString(),
+      replies: Object.keys(replies).map(function (id) {
+        var block = document.querySelector('article [data-block="' + id + '"]');
+        return {
+          block: Number(id),
+          quote: block ? block.textContent.replace(/\s+/g, ' ').trim().slice(0, 120) : '',
+          text: replies[id]
+        };
+      }).filter(function (r) { return r.text && r.text.trim(); })
+    };
+
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = (payload.slug || 'review') + '-replies.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
+
+  document.getElementById('btn-clear-replies').addEventListener('click', function () {
+    if (!confirm('همه‌ی یادداشت‌های شما پاک شود؟')) return;
+    replies = {};
+    save();
+  });
+
+  refreshBar();
 })();
 `;
 
@@ -428,10 +594,15 @@ const SCRIPT = `
  *   note       a line to the author, above the text
  */
 export function buildReviewReport({
-  doc, baseline, editor = '', author = null, translator = null, date = '', note = '',
+  doc, baseline, editor = '', author = null, translator = null,
+  date = '', note = '', title = null,
 }) {
   const fm = doc.frontmatter;
-  const title = String(fm.get('title') || 'بدون عنوان');
+  // The heading on this page is not always the title of the work - a report
+  // may cover one pass, one chapter, or one round of questions.
+  const heading = title === null || String(title).trim() === ''
+    ? String(fm.get('title') || 'بدون عنوان')
+    : String(title).trim();
   const theAuthor = author === null ? String(fm.get('author') || '') : String(author);
   const theTranslator = translator === null ? String(fm.get('translator') || '') : String(translator);
   const slug = String(fm.get('slug') || 'review');
@@ -464,15 +635,15 @@ export function buildReviewReport({
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ویرایش «${esc(title)}» — نشر اسب</title>
+<title>${esc(heading)} — نشر اسب</title>
 <style>${styles()}</style>
 </head>
-<body>
+<body data-slug="${esc(slug)}">
 <div class="sheet">
 
   <header>
     <div class="mark">${HORSE}</div>
-    <h1>${esc(title)}</h1>
+    <h1>${esc(heading)}</h1>
   </header>
 
   ${credits.length ? `<dl class="credits">
@@ -503,8 +674,12 @@ export function buildReviewReport({
     </ul>
     <p style="margin-top:12px;margin-bottom:0">
       با دکمه‌ی <b>متن نهایی</b> می‌توانید متن را بدون علامت‌ها و همان‌طور که
-      منتشر می‌شود بخوانید. هرکدام از تغییرها را نپسندیدید، به ما بگویید؛
-      هیچ‌چیز بدون تأیید شما نهایی نمی‌شود.
+      منتشر می‌شود بخوانید.
+    </p>
+    <p style="margin-top:10px;margin-bottom:0">
+      <b>نظرتان را همین‌جا بنویسید:</b> کنار هر پاراگراف دکمه‌ی «یادداشت» هست.
+      وقتی تمام شد، دکمه‌ی <b>فرستادن نظرها</b> پایین صفحه یک فایل کوچک
+      می‌سازد؛ همان را برای ما بفرستید.
     </p>
   </section>
 
@@ -513,6 +688,12 @@ export function buildReviewReport({
   <article>
 ${render(markedSource(before, doc.body))}
   </article>
+
+  <div class="replies-bar" id="replies-bar" hidden>
+    <span id="replies-count"></span>
+    <button type="button" id="btn-send-replies">فرستادن نظرها</button>
+    <button type="button" id="btn-clear-replies" class="quiet">پاک کردن همه</button>
+  </div>
 
   <footer>
     <strong>تحریریه‌ی نشر اسب</strong>

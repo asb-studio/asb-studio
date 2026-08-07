@@ -257,6 +257,57 @@ export async function leavePresence() {
   presenceChannel = null;
 }
 
+/* --------------------------------------------------------------------------
+   Watching a document
+
+   Realtime, so the other person's save arrives rather than being discovered.
+   Only the rows actually open in this browser are watched - a subscription per
+   open document, dropped when the tab closes, so nothing accumulates.
+
+   The payload carries the new row, which means a read-only viewer can be
+   brought up to date without a second request.
+   -------------------------------------------------------------------------- */
+
+const watchers = new Map();
+
+/**
+ * @param {string} path
+ * @param {(row: object) => void} onChange  called when somebody else saves
+ */
+export function watchDocument(path, onChange) {
+  if (watchers.has(path)) return;
+
+  const channel = supabase
+    .channel(`doc:${path}`)
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'documents', filter: `path=eq.${path}` },
+      (payload) => {
+        const row = payload.new;
+        if (!row) return;
+
+        // Your own save comes back too; it is not news.
+        supabase.auth.getSession().then(({ data }) => {
+          const me = data.session ? data.session.user.id : null;
+          if (row.updated_by && row.updated_by === me) return;
+          onChange(decorate(row));
+        });
+      })
+    .subscribe();
+
+  watchers.set(path, channel);
+}
+
+export function unwatchDocument(path) {
+  const channel = watchers.get(path);
+  if (!channel) return;
+  supabase.removeChannel(channel);
+  watchers.delete(path);
+}
+
+export function unwatchAll() {
+  for (const path of [...watchers.keys()]) unwatchDocument(path);
+}
+
 /** Suggests a workspace path for a file opened from disk. */
 export function suggestPath(fileName, category = '') {
   const clean = String(fileName).replace(/\.(md|markdown)$/i, '');

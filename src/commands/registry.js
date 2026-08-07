@@ -62,6 +62,7 @@ const ICONS = {
   open: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M9 13h6',
   cloud: 'M6 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.4A3.5 3.5 0 0 1 18.5 18z',
+  cloudsave: 'M6 17a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.4A3.5 3.5 0 0 1 18.5 17M12 12v8M9 17l3 3 3-3',
   /* Distinct from `publish`, which is an arrow out of a tray. This one is an
      arrow into a cloud, because the two sat side by side and read as the same
      picture. */
@@ -72,6 +73,7 @@ const ICONS = {
   trackNote: 'M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z',
   review: 'M4 7l3 3 5-6M4 17l3 3 5-6M14 8h7M14 18h7',
   trackOn: 'M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5zM14 6l4 4',
+  inbox: 'M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
   report: 'M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M9 3h6v3H9zM8 12h8M8 16h5',
   accept: 'M20 6L9 17l-5-5',
   markup: 'M4 6h16M4 12h9M4 18h13M17 10l4 4-4 4',
@@ -121,6 +123,9 @@ export const COMMANDS = [
     tip: 'سندهای مشترک با دلبر', run: (ctx) => ctx.openWorkspace() },
   { id: 'push', menu: 'file', label: 'فرستادن به فضای مشترک', icon: 'upload',
     tip: 'این سند را در فضای مشترک بگذار', run: (ctx) => ctx.pushToWorkspace() },
+  { id: 'push-save', menu: 'file', label: 'ذخیره در فضای مشترک', icon: 'cloudsave',
+    key: 'Mod-Shift-u', tip: 'ذخیره‌ی همین لحظه در فضای مشترک (Ctrl+Shift+U)',
+    run: (ctx) => ctx.saveToWorkspace() },
   { id: 'archive', menu: 'file', label: 'مرور آرشیو', icon: 'archive', separatorBefore: true,
     tip: 'دیدن وضعیت همه‌ی فایل‌های پوشه‌ی main',
     run: (ctx) => ctx.browseArchive() },
@@ -140,7 +145,7 @@ export const COMMANDS = [
     tip: 'ازنو (Ctrl+Y)', run: (ctx) => ctx.editor.redo() },
   { id: 'find', menu: 'edit', group: 'review', label: 'جست‌وجو و جایگزینی', icon: 'find',
     tip: 'جست‌وجو و جایگزینی (Ctrl+F)', key: 'Mod-f', separatorBefore: true,
-    run: (ctx) => ctx.editor.openSearch() },
+    run: (ctx) => ctx.openFind() },
 
   /* --- insert ----------------------------------------------------------- */
   { id: 'link', menu: 'insert', group: 'insert', label: 'پیوند', icon: 'link',
@@ -213,6 +218,9 @@ export const COMMANDS = [
   /* The three manual marks are gone. Tracking is a comparison now: turn it on
      and edit normally. A comment is the one thing no comparison can guess at,
      so it stays. */
+  { id: 'import-replies', menu: 'track', label: 'خواندن نظرهای پدیدآورنده', icon: 'inbox',
+    tip: 'فایلی که پدیدآورنده از صفحه‌ی گزارش فرستاده',
+    run: (ctx) => ctx.importReplies() },
   { id: 'track-note', menu: 'track', group: 'review', label: 'یادداشت برای نویسنده',
     icon: 'trackNote', tip: 'یادداشتی که در متن نهایی نمی‌ماند',
     separatorBefore: true, run: (ctx) => ctx.trackNote() },

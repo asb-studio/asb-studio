@@ -25,8 +25,16 @@
    change rather than being silently absorbed. */
 const TOKEN = /(\s+)/;
 
+/* Windows writes \r\n, the workspace stores \n, and a file that has been
+   through both ends up differing on EVERY SINGLE LINE - which is how a few
+   small edits were reported as 280 changes. The carriage returns mean nothing
+   to the text, so they go before anything is compared. */
+export function normalize(text) {
+  return String(text || '').replace(/\r\n?/g, '\n');
+}
+
 export function tokenize(text) {
-  return String(text || '').split(TOKEN).filter((t) => t !== '');
+  return normalize(text).split(TOKEN).filter((t) => t !== '');
 }
 
 /* --------------------------------------------------------------------------

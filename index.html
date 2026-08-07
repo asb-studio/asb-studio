@@ -11,7 +11,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="favicon.png">
   <title>استودیوی اسب</title>
 
   <!-- Vazirmatn is only the fallback. The house face is Arad, loaded from
@@ -142,6 +141,8 @@
         <span>تغییرهای ردیابی‌شده</span>
         <span id="review-summary" class="status--ok"></span>
         <span class="spacer"></span>
+        <button class="btn btn--quiet" id="btn-prev-change" data-tip="تغییر قبلی">قبلی</button>
+        <button class="btn btn--quiet" id="btn-next-change" data-tip="تغییر بعدی">بعدی</button>
         <button class="btn btn--quiet" id="btn-accept-all">پذیرش همه</button>
         <button class="btn btn--quiet" id="btn-reject-all">رد همه</button>
         <button class="btn btn--quiet" id="btn-accept-stop">پذیرش همه و توقف</button>
@@ -150,6 +151,25 @@
         <button class="btn btn--quiet" id="btn-review-close">بستن</button>
       </div>
       <div class="rv-list" id="review-list"></div>
+    </div>
+
+    <!-- ================================================================
+         Find and replace, with every match listed rather than visited one
+         at a time. See ui/find.js.
+         ================================================================ -->
+    <div class="footnotes-drawer" id="find" hidden>
+      <div class="fn-head">
+        <span>جست‌وجو</span>
+        <input id="find-term" class="control control--find" placeholder="دنبال چه می‌گردی؟">
+        <input id="find-replace" class="control control--find" placeholder="جایگزین با…">
+        <label class="find-opt"><input type="checkbox" id="find-case"> حساس به بزرگ و کوچک</label>
+        <label class="find-opt"><input type="checkbox" id="find-whole"> کلمه‌ی کامل</label>
+        <span id="find-summary" class="status--ok"></span>
+        <span class="spacer"></span>
+        <button class="btn btn--quiet" id="btn-replace-all">جایگزینی همه</button>
+        <button class="btn btn--quiet" id="btn-find-close">بستن</button>
+      </div>
+      <div class="fn-list" id="find-list"></div>
     </div>
 
     <!-- ================================================================

@@ -249,6 +249,19 @@ export class MarkdownEditor {
 
   /* --- inline editing ----------------------------------------------------- */
 
+  /** Selects a range and scrolls it into view. */
+  select(from, to) {
+    const max = this.view.state.doc.length;
+    const a = Math.max(0, Math.min(from, max));
+    const b = Math.max(0, Math.min(to, max));
+
+    this.view.dispatch({
+      selection: { anchor: a, head: b },
+      effects: EditorView.scrollIntoView(a, { y: 'center' }),
+    });
+    this.view.focus();
+  }
+
   /** Puts the caret at a character offset and scrolls it into view. */
   goToOffset(offset) {
     const max = this.view.state.doc.length;

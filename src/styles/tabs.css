@@ -192,3 +192,17 @@
   .control--find { width: 10ch; }
   .find-opt { display: none; }
 }
+
+/* In a right-to-left pane the scrollbar belongs on the right, where the text
+   starts. Browsers put it on the left for RTL by default, which is correct
+   for the writing direction and wrong for the habit of every Persian reader
+   who has ever used one. */
+.fn-list, .rv-list, #find-list {
+  direction: rtl;
+  scrollbar-gutter: stable;
+}
+
+.find-pos {
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--fg-faint);
+  direction: ltr; unicode-bidi: isolate; white-space: nowrap;
+}

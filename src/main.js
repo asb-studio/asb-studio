@@ -1151,12 +1151,16 @@ const ctx = {
   /* Saving to the workspace is deliberate, not automatic. Every save is a
      request against a free-tier quota, and a timer spending it while nobody is
      typing is spending it on nothing. Ctrl+Shift+U, when you decide. */
+  /* ONE COMMAND, NOT TWO. "Send" and "save" were separate, and nobody could
+     remember which was which - a sure sign they were the same action wearing
+     two hats. A document that has never been sent asks where it should live;
+     one that has been sent simply saves. */
   async saveToWorkspace() {
     const current = tab();
     if (!current) { toast('اول یک سند باز کن'); return; }
-
-    if (!current.remotePath) { ctx.pushToWorkspace(); return; }
     if (current.readOnly) { toast('این سند فقط خواندنی است'); return; }
+
+    if (!current.remotePath) { await ctx.pushToWorkspace(); return; }
 
     syncLoadedTab();
     normalizeFrontmatter(current.doc);
@@ -1202,12 +1206,18 @@ const ctx = {
     syncLoadedTab();
     normalizeFrontmatter(current.doc);
 
-    const path = await sendToWorkspace(
-      current.doc, current.name, current.doc.serialize(), { toast });
+    const result = await sendToWorkspace(
+      current.doc, current.name, current.doc.serialize(),
+      { toast, baseline: baselineOf(current) });
 
-    if (!path) return;
+    if (!result) return;
 
-    current.remotePath = path;
+    // The tab takes the name it was given, so "بدون‌نام" stops following a
+    // document around once it has one.
+    current.remotePath = result.path;
+    current.name = result.name;
+    app.tabs.render(app.session);
+    setFileName(result.name);
     current.readOnly = false;
     markDirty(false);
     startLockRefresh();

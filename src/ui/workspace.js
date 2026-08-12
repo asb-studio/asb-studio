@@ -146,16 +146,26 @@ async function openOne(row, handlers) {
 export async function pushToWorkspace(doc, fileName, content, handlers) {
   const category = String(doc.frontmatter.get('category') || '');
   const slug = String(doc.frontmatter.get('slug') || '').trim();
-  const suggested = suggestPath(slug || fileName, category);
 
-  const values = await dialog.form('فرستادن به فضای مشترک', [
-    { name: 'path', label: 'مسیر در مخزن', value: suggested, ltr: true,
-      hint: 'همان مسیری که فایل در پوشه‌ی سایت دارد. این مسیر، هویت سند است.' },
-  ], { confirmLabel: 'بفرست' });
+  /* A NAME, NOT A SLUG. A piece being drafted has no slug yet - that is
+     decided at publication - and refusing to name a file until then meant
+     everything in the workspace was called "بدون‌نام". The name is what a
+     person calls the thing; the slug is what the site calls it. */
+  const suggestedName = slug || String(fileName).replace(/\.(md|markdown)$/i, '')
+    .replace(/^بدون‌نام$/, '');
 
-  if (!values || !values.path.trim()) return null;
+  const values = await dialog.form('ذخیره در فضای مشترک', [
+    { name: 'name', label: 'نام فایل', value: suggestedName,
+      hint: 'هرچه بخواهی. بعداً هم می‌شود عوضش کرد.' },
+    { name: 'folder', label: 'پوشه', value: category || 'main',
+      ltr: true, hint: 'اختیاری. جایی که در مخزن سایت می‌نشیند.' },
+  ], { confirmLabel: 'ذخیره' });
 
-  const path = values.path.trim();
+  if (!values || !values.name.trim()) return null;
+
+  const clean = values.name.trim().replace(/\.(md|markdown)$/i, '');
+  const folder = values.folder.trim().replace(/^\/+|\/+$/g, '');
+  const path = folder ? `${folder}/${clean}.md` : `${clean}.md`;
 
   try {
     /* THE TEXT GOES UP BEFORE THE LOCK, and the order matters more than it
@@ -165,8 +175,8 @@ export async function pushToWorkspace(doc, fileName, content, handlers) {
        which is the honest outcome. */
     await writeDocument(path, content, handlers.baseline);
     await claimDocument(path);
-    handlers.toast('به فضای مشترک رفت');
-    return path;
+    handlers.toast('در فضای مشترک ذخیره شد');
+    return { path, name: `${clean}.md` };
   } catch (err) {
     if (err && err.code === 'locked') {
       await dialog.say('این مسیر باز است', err.message);

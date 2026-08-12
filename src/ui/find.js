@@ -110,19 +110,72 @@ export class FindPanel {
     this.replacement = root.querySelector('#find-replace');
     this.list = root.querySelector('#find-list');
     this.summary = root.querySelector('#find-summary');
-    this.caseBox = root.querySelector('#find-case');
+    this.position = root.querySelector('#find-position');
+    this.at = 0;
     this.wholeBox = root.querySelector('#find-whole');
 
     this.term.addEventListener('input', () => this.search());
-    this.caseBox.addEventListener('change', () => this.search());
     this.wholeBox.addEventListener('change', () => this.search());
 
     root.querySelector('#btn-find-close').addEventListener('click', () => this.handlers.onClose());
     root.querySelector('#btn-replace-all').addEventListener('click', () => this._replaceAll());
+    root.querySelector('#btn-replace-one').addEventListener('click', () => this._replaceOne());
+    root.querySelector('#btn-find-prev').addEventListener('click', () => this.step(-1));
+    root.querySelector('#btn-find-next').addEventListener('click', () => this.step(1));
+
+    /* Arrow keys walk the results while the caret stays in the search box, so
+       finding the right one never means letting go of what you were typing. */
+    this.term.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); this.step(1); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); this.step(-1); }
+      else if (event.key === 'Enter') { event.preventDefault(); this.step(event.shiftKey ? -1 : 1); }
+    });
 
     this.term.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.handlers.onClose();
     });
+  }
+
+  /* Which result is selected. Every action - replace, jump, arrow key - works
+     on this one, so "the match I am looking at" is never ambiguous. */
+  step(delta) {
+    if (this.hits.length === 0) return;
+
+    this.at = (this.at + delta + this.hits.length) % this.hits.length;
+    this._focusHit();
+  }
+
+  _focusHit() {
+    const hit = this.hits[this.at];
+    if (!hit) return;
+
+    this.handlers.goTo(hit.from, hit.to);
+
+    const rows = this.list.children;
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('find-row--at', i === this.at);
+    }
+    if (rows[this.at]) rows[this.at].scrollIntoView({ block: 'nearest' });
+
+    this.position.textContent = `${fa(this.at + 1)} از ${fa(this.hits.length)}`;
+  }
+
+  /** Replaces only the selected result. */
+  _replaceOne() {
+    const hit = this.hits[this.at];
+    if (!hit) { this.handlers.toast('اول یک مورد را انتخاب کن'); return; }
+
+    const text = this.handlers.getText();
+    this.handlers.setText(
+      text.slice(0, hit.from) + this.replacement.value + text.slice(hit.to)
+    );
+
+    const wasAt = this.at;
+    this.search();
+
+    // Stay where we were, so repeated presses walk forward naturally.
+    this.at = Math.min(wasAt, Math.max(0, this.hits.length - 1));
+    if (this.hits.length) this._focusHit();
   }
 
   get isOpen() { return !this.root.hidden; }
@@ -142,10 +195,10 @@ export class FindPanel {
     if (!this.isOpen) return;
 
     const text = this.handlers.getText();
-    this.hits = findAll(text, this.term.value, {
-      caseSensitive: this.caseBox.checked,
-      whole: this.wholeBox.checked,
-    });
+    // Persian has no letter case, so matching is always insensitive - the
+    // option only ever applied to Latin words inside the text and confused
+    // more than it helped.
+    this.hits = findAll(text, this.term.value, { whole: this.wholeBox.checked });
 
     this.summary.textContent = this.term.value.trim() === ''
       ? ''
@@ -153,6 +206,8 @@ export class FindPanel {
     this.summary.className = this.hits.length ? 'status--ok' : 'status--warn';
 
     this.list.innerHTML = '';
+    if (this.at >= this.hits.length) this.at = 0;
+    this.position.textContent = this.hits.length ? `${fa(this.at + 1)} از ${fa(this.hits.length)}` : '';
 
     this.hits.forEach((hit, index) => {
       const row = document.createElement('button');
@@ -163,14 +218,10 @@ export class FindPanel {
         + `<span class="find-row__text">${esc(hit.before)}`
         + `<mark>${esc(hit.match)}</mark>${esc(hit.after)}</span>`;
 
-      row.addEventListener('click', () => {
-        this.handlers.goTo(hit.from, hit.to);
-        for (const other of this.list.children) other.classList.remove('find-row--at');
-        row.classList.add('find-row--at');
-      });
+      row.addEventListener('click', () => { this.at = index; this._focusHit(); });
 
       this.list.appendChild(row);
-      if (index === 0) row.classList.add('find-row--at');
+      if (index === this.at) row.classList.add('find-row--at');
     });
   }
 

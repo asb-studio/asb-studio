@@ -198,7 +198,6 @@
    for the writing direction and wrong for the habit of every Persian reader
    who has ever used one. */
 .fn-list, .rv-list, #find-list {
-  direction: rtl;
   scrollbar-gutter: stable;
 }
 

@@ -10,7 +10,8 @@
    ========================================================================== */
 
 import {
-  listDocuments, readDocument, claimDocument, writeDocument, suggestPath,
+  listDocuments, readDocument, claimDocument, writeDocument, deleteDocument,
+  suggestPath,
 } from '../storage/supabase.js';
 import * as dialog from './dialog.js';
 
@@ -42,6 +43,13 @@ export async function openWorkspace(handlers) {
   const card = dialog.custom('فضای مشترک', body, [
     { label: 'بستن', value: null, primary: true, cancel: true },
   ], { wide: true });
+
+  // Passed down so a deletion can redraw the list without closing it.
+  handlers.refresh = async () => {
+    try {
+      render(body, await listDocuments(), handlers);
+    } catch { /* the dialog already said what went wrong */ }
+  };
 
   try {
     const rows = await listDocuments();
@@ -92,7 +100,59 @@ function render(root, rows, handlers) {
     }
 
     item.addEventListener('click', () => openOne(row, handlers));
-    root.appendChild(item);
+
+    /* A workspace with no way to remove anything is not a workspace, it is a
+       loft. Deletion sits on the row rather than behind a menu, because the
+       moment you want it is the moment you are looking at the thing. */
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'ws-remove';
+    remove.dataset.tip = 'حذف از فضای مشترک';
+    remove.setAttribute('aria-label', `حذف ${row.path}`);
+    remove.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/></svg>`;
+
+    remove.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      await removeOne(row, handlers);
+    });
+
+    const line = document.createElement('div');
+    line.className = 'ws-line';
+    line.append(item, remove);
+    root.appendChild(line);
+  }
+}
+
+/* Deleting is not undoable and there is no bin, so the path has to be typed.
+   That sounds heavy-handed until you picture losing the wrong manuscript. */
+async function removeOne(row, handlers) {
+  if (row.isLocked && row.lockedBy !== handlers.currentEmail) {
+    await dialog.say('نمی‌شود حذف کرد',
+      `${row.lockedBy} الان این سند را باز دارد.`);
+    return;
+  }
+
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <p class="dialog__text">
+      این سند از فضای مشترک برداشته می‌شود. نسخه‌ی روی کامپیوترها دست نمی‌خورد،
+      پس اگر لازم شد می‌شود دوباره فرستادش.
+    </p>
+    <p class="dialog__text mono" style="color:var(--fg-dim);font-size:0.78rem">${esc(row.path)}</p>`;
+
+  const go = await dialog.custom('کارت با این سند تمام شده؟', body, [
+    { label: 'نه', value: false, cancel: true },
+    { label: 'بله، حذف کن', value: true, danger: true },
+  ]);
+  if (!go) return;
+
+  try {
+    await deleteDocument(row.path);
+    handlers.toast('از فضای مشترک حذف شد');
+    handlers.refresh();
+  } catch (err) {
+    await dialog.say('حذف نشد', String(err.message || err));
   }
 }
 

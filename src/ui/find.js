@@ -93,6 +93,29 @@ export function replaceAll(text, hits, replacement) {
 }
 
 /* --------------------------------------------------------------------------
+   Invisible characters
+
+   Everything a Persian text picks up on its way out of Word and cannot be
+   seen once it is here. Being able to search for them is the difference
+   between "something is odd about this line" and knowing what.
+
+   Word's own Special menu has thirty entries; the rest are either English
+   grammar helpers or Word's own formatting objects, which do not survive the
+   trip into Markdown at all.
+   -------------------------------------------------------------------------- */
+export const SPECIALS = [
+  { label: 'نیم‌فاصله', char: '\u200c', hint: 'ZWNJ' },
+  { label: 'فاصله‌ی سخت', char: '\u00a0', hint: 'nbsp — از وُرد می‌آید و در وب فاصله‌ی عادی نیست' },
+  { label: 'کشیده', char: '\u0640', hint: 'ـ' },
+  { label: 'تب', char: '\t', hint: '' },
+  { label: 'نشانه‌ی راست‌به‌چپ', char: '\u200f', hint: 'RLM' },
+  { label: 'نشانه‌ی چپ‌به‌راست', char: '\u200e', hint: 'LRM' },
+  { label: 'ی عربی', char: '\u064a', hint: 'باید ی فارسی باشد' },
+  { label: 'ک عربی', char: '\u0643', hint: 'باید ک فارسی باشد' },
+  { label: 'اعراب', char: '\u064e', hint: 'فتحه و مانندش' },
+];
+
+/* --------------------------------------------------------------------------
    The panel
    -------------------------------------------------------------------------- */
 
@@ -111,8 +134,9 @@ export class FindPanel {
     this.list = root.querySelector('#find-list');
     this.summary = root.querySelector('#find-summary');
     this.position = root.querySelector('#find-position');
-    this.at = 0;
     this.wholeBox = root.querySelector('#find-whole');
+    this.at = 0;
+    this._buildSpecials(root.querySelector('#find-specials'));
 
     this.term.addEventListener('input', () => this.search());
     this.wholeBox.addEventListener('change', () => this.search());
@@ -134,6 +158,28 @@ export class FindPanel {
     this.term.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') this.handlers.onClose();
     });
+  }
+
+  /* A row of buttons that drop an invisible character into the search box.
+     Typing one is impossible; picking it from a list is not. */
+  _buildSpecials(host) {
+    if (!host) return;
+
+    for (const item of SPECIALS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'find-special';
+      button.textContent = item.label;
+      button.dataset.tip = item.hint || item.label;
+
+      button.addEventListener('click', () => {
+        this.term.value += item.char;
+        this.term.focus();
+        this.search();
+      });
+
+      host.appendChild(button);
+    }
   }
 
   /* Which result is selected. Every action - replace, jump, arrow key - works

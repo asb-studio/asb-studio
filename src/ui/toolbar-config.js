@@ -26,6 +26,7 @@ export const DEFAULT_TOOLS = [
   'poem', 'center', 'noindent', 'colour',
   'link', 'image', 'table', 'footnote',
   'ereader', 'paywall',
+  'excerpt',
   'find', 'ids', 'review', 'publish',
 ];
 

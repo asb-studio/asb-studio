@@ -205,3 +205,15 @@
   font-family: var(--font-mono); font-size: 0.72rem; color: var(--fg-faint);
   direction: ltr; unicode-bidi: isolate; white-space: nowrap;
 }
+
+.find-specials {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  padding: 8px 12px; border-bottom: 1px solid var(--line-soft);
+}
+
+.find-special {
+  font-family: inherit; font-size: 0.72rem; color: var(--fg-dim);
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 20px; padding: 4px 11px; cursor: pointer;
+}
+.find-special:hover { border-color: var(--accent); color: var(--accent-strong); }

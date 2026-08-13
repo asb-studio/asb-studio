@@ -29,7 +29,10 @@ import { readFootnotes, nextFootnoteId } from './model/footnotes.js';
 import { UsageTracker } from './model/usage.js';
 import { renderPreview, renderMarkedPreview } from './markdown/preview.js';
 import { lintDocument, SEVERITY } from './markdown/lint.js';
-import { repairBody, repairOne, previewRepair } from './markdown/repair.js';
+import {
+  repairBody, repairOne, previewRepair,
+  splitParagraphs as splitParagraphsIn, countGluedParagraphs,
+} from './markdown/repair.js';
 import { findChanges, countChanges } from './markdown/critic.js';
 import {
   isTracking, startTracking, stopTracking, baselineOf, rebaseline,
@@ -224,7 +227,23 @@ function refresh() {
   preview.parentElement.classList.toggle('is-empty', empty);
   if (empty) mountLogos(preview);
 
-  renderIssues(current ? lintDocument(current.doc) : []);
+  const issues = current ? lintDocument(current.doc) : [];
+
+  /* A whole chapter with no blank line in it is almost always a paste from
+     Word, and almost never what was meant. */
+  if (current) {
+    const glued = countGluedParagraphs(body);
+    if (glued >= 3) {
+      issues.unshift({
+        rule: 'glued-paragraphs', severity: 'warn', line: 1,
+        message: `${fa(glued)} جا دو پاراگراف به هم چسبیده‌اند — احتمالاً متن از وُرد کپی شده. `
+          + 'از منوی ابزار «جدا کردن پاراگراف‌ها» را بزن.',
+        excerpt: '', fix: null, fixable: false,
+      });
+    }
+  }
+
+  renderIssues(issues);
   renderReadiness();
   if (app.footnotes) app.footnotes.render();
   if (app.sources) app.sources.render();
@@ -768,7 +787,12 @@ const ctx = {
   assignIds() {
     const { body, added } = assignParagraphIds(app.editor.getText());
     if (added === 0) { toast('همه‌ی پاراگراف‌ها از قبل شناسه دارند'); return; }
+    /* Keep the view where it was. setText replaces the whole document, and
+       without saving the caret first the reader is thrown back to line one -
+       which after a long scroll is its own small punishment. */
+    const caret = app.editor.getCaret();
     app.editor.setText(body);
+    app.editor.setCaret(caret);
     markDirty(true);
     refresh();
     toast(`${fa(added)} شناسه‌ی دائمی اضافه شد`);
@@ -841,6 +865,35 @@ const ctx = {
     markDirty(true);
     refresh();
     toast(`${fa(total)} مورد به مارک‌دان تبدیل شد`);
+  },
+
+  /* Text pasted from Word arrives with one newline between paragraphs where
+     Markdown needs two. Offered rather than done, because a manuscript is not
+     something to reformat behind the author's back. */
+  async splitParagraphs() {
+    const current = tab();
+    if (!current) { toast('اول یک سند باز کن'); return; }
+
+    syncLoadedTab();
+    const { body, added } = splitParagraphsIn(current.doc.body);
+
+    if (added === 0) {
+      await dialog.say('جدا کردن پاراگراف‌ها', 'پاراگراف چسبیده‌ای پیدا نشد.');
+      return;
+    }
+
+    const yes = await dialog.ask('جدا کردن پاراگراف‌ها',
+      `${fa(added)} جا پیدا شد که دو پاراگراف به هم چسبیده‌اند. بینشان خط خالی گذاشته می‌شود. `
+      + 'فهرست‌ها، جدول‌ها، نقل‌قول‌ها و شعرها دست نمی‌خورند. با Ctrl+Z هم برمی‌گردد.',
+      { confirmLabel: 'جدا کن' });
+    if (!yes) return;
+
+    const caret = app.editor.getCaret();
+    app.editor.setText(body);
+    app.editor.setCaret(caret);
+    markDirty(true);
+    refresh();
+    toast(`${fa(added)} پاراگراف جدا شد`);
   },
 
   async repairAll() {

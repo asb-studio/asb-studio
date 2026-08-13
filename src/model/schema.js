@@ -206,6 +206,7 @@ export const PERSIAN_MONTHS = [
 export const MARKERS = {
   ereader: '<!-- EREADER-START -->',
   paywall: '<!-- PAYWALL -->',
+  excerpt: '<!-- EXCERPT-END -->',
 };
 
 /** Generates a v4 UUID for book_id, the same shape build.py expects. */

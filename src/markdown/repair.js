@@ -173,3 +173,51 @@ export function repairBody(body, only = null) {
 export function previewRepair(body) {
   return repairBody(body).total;
 }
+
+/* --------------------------------------------------------------------------
+   Paragraphs pasted from Word
+
+   Word separates paragraphs with one newline; Markdown needs two. Paste a
+   chapter in and every paragraph runs into the next, which looks like a
+   formatting problem and is actually a data one.
+
+   The rule is deliberately timid. It only puts a blank line between two lines
+   of ordinary prose - never inside a list, a table, a quote, a heading, a
+   fenced block, or above an attribute line, because in all of those a single
+   newline means something.
+   -------------------------------------------------------------------------- */
+
+/* Line starts where a single newline is meaningful and must be left alone. */
+const STRUCTURAL = /^\s*(\{:|[-*+]\s|\d+[.)]\s|>|#|\||\[\^|<)/;
+
+export function countGluedParagraphs(body) {
+  return splitParagraphs(body).added;
+}
+
+/**
+ * @returns {{ body: string, added: number }}
+ */
+export function splitParagraphs(body) {
+  const lines = body.split('\n');
+  const out = [];
+  let fence = false;
+  let added = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    out.push(line);
+
+    if (/^\s{0,3}(```|~~~)/.test(line)) { fence = !fence; continue; }
+    if (fence) continue;
+
+    const next = lines[i + 1];
+    if (next === undefined) continue;
+    if (!line.trim() || !next.trim()) continue;          // already separated
+    if (STRUCTURAL.test(line) || STRUCTURAL.test(next)) continue;
+
+    out.push('');
+    added++;
+  }
+
+  return { body: out.join('\n'), added };
+}

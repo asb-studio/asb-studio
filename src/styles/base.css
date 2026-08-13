@@ -116,3 +116,76 @@ textarea.control { resize: vertical; min-height: 68px; line-height: 1.9; }
 
 /* Tooltips are drawn by ui/tooltip.js on a single floating element, because
    the ribbon scrolls - and anything that scrolls also clips. See that file. */
+
+/* ==========================================================================
+   Scrollbars
+
+   In a right-to-left page the browser puts the scrollbar on the left. That is
+   correct by the letter of the spec - the bar follows the writing direction -
+   and wrong by every habit a Persian reader has: the bar has been on the right
+   in every window they have ever used.
+
+   The fix is to flip the box to LTR, which moves the bar, and flip the content
+   back to RTL so the text is unaffected. It has to be done per element rather
+   than globally, because flipping a container flips everything inside it that
+   does not flip back.
+   ========================================================================== */
+
+.pane__body,
+.preview,
+.cm-scroller,
+.fn-list,
+.rv-list,
+#find-list,
+#issue-list,
+.issues,
+.panel__body,
+.menu__list,
+.toolbar__overflow,
+.st-menu,
+.dialog__body,
+.ar-tree,
+.ws-list {
+  direction: ltr;
+}
+
+.pane__body > *,
+.preview > *,
+.cm-scroller > *,
+.fn-list > *,
+.rv-list > *,
+#find-list > *,
+#issue-list > *,
+.issues > *,
+.panel__body > *,
+.menu__list > *,
+.toolbar__overflow > *,
+.st-menu > *,
+.dialog__body > *,
+.ar-tree > *,
+.ws-list > * {
+  direction: rtl;
+}
+
+/* The editor is the exception. CodeMirror computes its own layout from the
+   direction of its scroller, so flipping that box would put the caret, the
+   line wrapping and the selection on the wrong side. It keeps its bar on the
+   left; everything else moves. */
+.cm-scroller { direction: rtl; }
+.cm-scroller > * { direction: rtl; }
+
+/* A thinner, quieter bar, since it is now on the side the eye rests on. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 20px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--fg-faint); background-clip: content-box; }

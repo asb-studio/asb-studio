@@ -126,3 +126,24 @@
     max-width: none; font-size: 0; gap: 0; padding: 5px; border-radius: 50%;
   }
 }
+
+/* --------------------------------------------------------------------------
+   A row in the workspace, with its delete button
+   -------------------------------------------------------------------------- */
+
+.ws-line {
+  display: flex; align-items: stretch;
+  border-bottom: 1px solid var(--line-soft);
+}
+.ws-line:last-child { border-bottom: 0; }
+.ws-line .ws-row { border-bottom: 0; flex: 1; min-width: 0; }
+
+.ws-remove {
+  flex-shrink: 0; width: 38px;
+  display: grid; place-items: center;
+  background: none; border: 0; cursor: pointer;
+  color: var(--fg-faint);
+  transition: color var(--fast), background var(--fast);
+}
+.ws-remove svg { width: 16px; height: 16px; }
+.ws-remove:hover { color: var(--err); background: rgba(224, 107, 99, 0.1); }

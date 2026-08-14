@@ -124,6 +124,13 @@ const app = {
 
 const tab = () => app.session.active;
 
+/* Where a work's own folder sits, worked out from what the frontmatter
+   already knows. A guess the author can correct, not a rule. */
+function guessFolder(category, slug) {
+  if (!category || !slug) return '';
+  return `main/${category}/${slug}`;
+}
+
 function markDirty(value) {
   const current = tab();
   if (current) current.dirty = value;
@@ -682,15 +689,33 @@ const ctx = {
     app.editor.replaceSelection(`[${values.text || 'متن پیوند'}](${values.url})`);
   },
 
+  /* A relative image path breaks the moment the page's own URL changes shape -
+     a redirect, a trailing slash, a folder that gains a level. The full path
+     from the site root does not, so that is what goes in the file. */
   async insertImage() {
+    const current = tab();
+    const fm = current ? current.doc.frontmatter : null;
+
+    const category = fm ? String(fm.get('category') || '') : '';
+    const slug = fm ? String(fm.get('slug') || '') : '';
+    const author = fm ? String(fm.get('author') || '') : '';
+
     const values = await dialog.form('درج تصویر', [
-      { name: 'src', label: 'نام فایل', value: '', placeholder: 'cover.jpg', ltr: true,
-        hint: 'تصویر باید کنار همین فایل .md باشد.' },
+      { name: 'file', label: 'نام فایل تصویر', value: '', ltr: true,
+        placeholder: 'image1.jpg' },
       { name: 'alt', label: 'توضیح تصویر', value: '',
-        hint: 'برای خواننده‌ای که تصویر را نمی‌بیند.' },
-    ]);
-    if (!values || !values.src) return;
-    app.editor.insertBlock(`![${values.alt}](${values.src})`);
+        hint: 'برای کسی که تصویر را نمی‌بیند، و برای وقتی تصویر بالا نیاید.' },
+      { name: 'folder', label: 'پوشه‌ی اثر در سایت', value: guessFolder(category, slug),
+        ltr: true, hint: 'مسیر کامل از ریشه‌ی سایت. خالی بگذار تا مسیر نسبی بنویسد.' },
+    ], { confirmLabel: 'درج' });
+
+    if (!values || !values.file.trim()) return;
+
+    const file = values.file.trim();
+    const folder = values.folder.trim().replace(/^\/+|\/+$/g, '');
+    const path = folder ? `/${folder}/${file}` : file;
+
+    app.editor.insertBlock(`![${values.alt.trim() || file}](${path})`);
   },
 
   async insertTable() {
@@ -1627,8 +1652,19 @@ async function doSaveAs() {
   syncLoadedTab();
   normalizeFrontmatter(current.doc);
   const text = current.doc.serialize();
-  const slug = current.doc.frontmatter.get('slug');
-  const suggested = slug ? `${slug}.md` : current.name;
+  /* A clean URL wants the file to be index.md inside a folder named for the
+     slug - /main/…/slug/ rather than /main/…/slug/slug. Naming it by hand
+     each time is one of those small chores that goes wrong eventually. */
+  const slug = String(current.doc.frontmatter.get('slug') || '').trim();
+  let suggested = current.name;
+
+  if (slug) {
+    const useIndex = await dialog.ask('نام فایل',
+      `برای آدرس تمیز، فایل باید داخل پوشه‌ی «${slug}» با نام index.md ذخیره شود.`,
+      { confirmLabel: 'index.md', cancelLabel: `${slug}.md` });
+
+    suggested = useIndex ? 'index.md' : `${slug}.md`;
+  }
 
   try {
     const handle = await files.saveAs(text, suggested);

@@ -39,7 +39,7 @@ import {
 } from './model/track.js';
 import { diffSummary, changeList, resolveChange } from './markdown/diff.js';
 import { buildReviewReport } from './export/review-report.js';
-import { importDocx as readDocx } from './import/docx.js';
+import { analyseDocx, importDocx as readDocx, IMPORT_RULES } from './import/docx.js';
 import { migrateBody, findRemainingHtml } from './markdown/migrate.js';
 import { MarkdownEditor } from './editor/editor.js';
 import { Sidebar } from './ui/sidebar.js';
@@ -136,6 +136,26 @@ function markDirty(value) {
   const current = tab();
   if (current) current.dirty = value;
   app.tabs.render(app.session);
+}
+
+/* --------------------------------------------------------------------------
+   What each Word style means
+
+   Learned once and kept, because the answer belongs to the person who named
+   the style and not to any rule. The second manuscript by the same translator
+   imports without a single question.
+   -------------------------------------------------------------------------- */
+
+const STYLE_MEMORY_KEY = 'asb-studio:docx-styles';
+
+function loadStyleMemory() {
+  try { return JSON.parse(localStorage.getItem(STYLE_MEMORY_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function saveStyleMemory(map) {
+  try { localStorage.setItem(STYLE_MEMORY_KEY, JSON.stringify(map)); }
+  catch { /* private mode */ }
 }
 
 /* --------------------------------------------------------------------------
@@ -1320,9 +1340,9 @@ const ctx = {
 
   /* A Word manuscript, read straight into Markdown.
      Everything the author already did in Word - headings, footnotes, scene
-     breaks, centred lines - survives, because Word records those as named
-     styles and this reads the names. What does not survive is colour, font
-     and size, which Markdown has no way to say and the site decides anyway. */
+     breaks, centred lines - survives. What Word does not record structurally
+     is asked about once and remembered, because a style called «ابتدای داستان»
+     means something only the person who named it knows. */
   async importDocx() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -1336,11 +1356,81 @@ const ctx = {
 
     toast('در حال خواندن فایل ورد…');
 
-    let result;
+    const buffer = await file.arrayBuffer();
+
+    let analysis;
     try {
-      result = await readDocx(await file.arrayBuffer());
+      analysis = await analyseDocx(buffer);
     } catch (err) {
       dialog.say('خوانده نشد', String(err.message || err));
+      return;
+    }
+
+    const remembered = loadStyleMemory();
+    const unknown = analysis.styles.filter((s) => !s.known && !remembered[s.name]);
+
+    /* --- ask about anything nobody has mapped yet --- */
+    const chosen = {};
+
+    if (unknown.length) {
+      const node = document.createElement('div');
+      node.innerHTML = `
+        <p class="dialog__text">
+          ${fa(unknown.length)} استایل هست که استودیو مطمئن نیست چه معنایی دارند.
+          یک بار بگو، تا دفعه‌های بعد خودش بداند.
+        </p>`;
+
+      const selects = new Map();
+
+      for (const style of unknown) {
+        const row = document.createElement('div');
+        row.className = 'field';
+
+        const label = document.createElement('label');
+        label.textContent = `${style.name} — ${fa(style.count)} بار`;
+
+        const select = document.createElement('select');
+        select.className = 'control';
+        for (const [key, entry] of Object.entries(IMPORT_RULES)) {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = entry.label;
+          select.appendChild(option);
+        }
+        select.value = style.guess || 'p';
+
+        const hint = document.createElement('div');
+        hint.className = 'field__hint';
+        hint.textContent = style.mostlyEmpty
+          ? 'همه‌ی پاراگراف‌هایش خالی‌اند'
+          : (style.samples[0] || '').slice(0, 70);
+
+        row.append(label, select, hint);
+        node.appendChild(row);
+        selects.set(style.name, select);
+      }
+
+      const go = await dialog.custom('این استایل‌ها چه هستند؟', node, [
+        { label: 'انصراف', value: false, cancel: true },
+        { label: 'ادامه', value: true, primary: true },
+      ], { wide: true });
+      if (!go) return;
+
+      for (const [name, select] of selects) chosen[name] = select.value;
+      saveStyleMemory({ ...remembered, ...chosen });
+    }
+
+    /* --- convert --- */
+    const overrides = {};
+    for (const [name, key] of Object.entries({ ...remembered, ...chosen })) {
+      if (IMPORT_RULES[key]) overrides[name] = IMPORT_RULES[key].rule;
+    }
+
+    let result;
+    try {
+      result = await readDocx(buffer, overrides);
+    } catch (err) {
+      dialog.say('تبدیل نشد', String(err.message || err));
       return;
     }
 
@@ -1358,28 +1448,18 @@ const ctx = {
         <div class="stats__cell"><span class="stats__value">${fa(report.breaks)}</span>
           <span class="stats__label">جداکننده</span></div>
       </div>
-      ${report.unknownStyles.length ? `
-        <div class="stats__section">
-          <h3>استایل‌هایی که نشناخت</h3>
-          <p class="empty">این‌ها پاراگراف عادی شدند. اگر معنایی داشتند، بگو تا اضافه کنم.</p>
-          ${report.unknownStyles.slice(0, 8).map((s) => `
-            <div class="stats__row"><span>${esc(s.name)}</span>
-              <span class="spacer"></span>
-              <span class="count">${fa(s.count)} بار</span></div>`).join('')}
-        </div>` : ''}
       <p class="dialog__text" style="color:var(--fg-dim);font-size:0.79rem">
-        نیم‌فاصله، فاصله‌ی سخت، کشیده، اعراب و «ی» و «ک» عربی هم سرِ راه تمیز شدند.
+        نیم‌فاصله، فاصله‌ی سخت، کشیده، اعراب و «ی» و «ک» عربی سرِ راه تمیز شدند.
         شناسنامه و شناسه‌ی پاراگراف‌ها را باید خودت اضافه کنی.
       </p>`;
 
-    const go = await dialog.custom('فایل ورد خوانده شد', node, [
+    const open = await dialog.custom('فایل ورد خوانده شد', node, [
       { label: 'انصراف', value: false, cancel: true },
       { label: 'باز کن', value: true, primary: true },
     ], { wide: true });
-    if (!go) return;
+    if (!open) return;
 
-    const name = file.name.replace(/\.docx$/i, '.md');
-    openInTab(name, markdown, null);
+    openInTab(file.name.replace(/\.docx$/i, '.md'), markdown, null);
     toast(`${fa(report.paragraphs)} پاراگراف و ${fa(report.footnotes)} پانویس وارد شد`);
   },
 

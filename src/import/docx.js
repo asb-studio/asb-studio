@@ -122,6 +122,13 @@ async function inflate(bytes) {
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
+/** The document body, which every pass needs. */
+function body0(documentXml) {
+  const body = documentXml.getElementsByTagNameNS(W, 'body')[0];
+  if (!body) throw new Error('متن این فایل پیدا نشد.');
+  return body;
+}
+
 function parse(bytes) {
   const text = new TextDecoder().decode(bytes);
   const doc = new DOMParser().parseFromString(text, 'application/xml');
@@ -325,6 +332,77 @@ function runsToMarkdown(paragraph, names, footnoteOrder) {
    -------------------------------------------------------------------------- */
 
 /**
+ * Reads the file and reports what is in it, WITHOUT converting.
+ *
+ * The point is to ask before acting: a manuscript's own styles carry meaning
+ * no algorithm can be sure of, and one question answered once beats a hundred
+ * paragraphs corrected afterwards.
+ *
+ * @returns {{ styles: Array, footnotes: number, paragraphs: number }}
+ */
+export async function analyseDocx(buffer) {
+  const files = await unzip(buffer);
+  const documentXml = parse(files.get('word/document.xml'));
+  const stylesXml = files.has('word/styles.xml') ? parse(files.get('word/styles.xml')) : null;
+
+  const styles = readStyles(stylesXml);
+  const names = styleNames(styles);
+
+  const body = documentXml.getElementsByTagNameNS(W, 'body')[0];
+  if (!body) throw new Error('متن این فایل پیدا نشد.');
+
+  const found = new Map();
+  let paragraphs = 0;
+
+  for (const p of Array.from(body.getElementsByTagNameNS(W, 'p'))) {
+    paragraphs++;
+
+    const styleEl = p.getElementsByTagNameNS(W, 'pStyle')[0];
+    const styleId = styleEl ? styleEl.getAttributeNS(W, 'val') : null;
+    const styleName = styleId ? (names.get(styleId) || styleId) : '(بدون استایل)';
+
+    let text = '';
+    for (const t of Array.from(p.getElementsByTagNameNS(W, 't'))) text += t.textContent;
+
+    if (!found.has(styleName)) {
+      const own = p.getElementsByTagNameNS(W, 'jc')[0];
+      const align = own ? own.getAttributeNS(W, 'val')
+        : (styles.get(styleId) ? styles.get(styleId).align : null);
+
+      found.set(styleName, {
+        name: styleName,
+        id: styleId,
+        count: 0,
+        empty: 0,
+        centred: align === 'center',
+        heading: headingLevel(styles, styleId),
+        known: Boolean(STYLE_MAP[styleName]),
+        samples: [],
+      });
+    }
+
+    const entry = found.get(styleName);
+    entry.count++;
+    if (!text.trim()) entry.empty++;
+    else if (entry.samples.length < 2) entry.samples.push(text.trim().slice(0, 80));
+  }
+
+  const list = [...found.values()].map((entry) => ({
+    ...entry,
+    mostlyEmpty: entry.count > 0 && entry.empty / entry.count > 0.8,
+    guess: entry.known ? null
+      : entry.heading !== null
+        ? (entry.heading <= 1 ? 'h1' : entry.heading === 2 ? 'h2' : 'h3')
+        : guessRule(entry.name, entry.centred, entry.count > 0 && entry.empty / entry.count > 0.8),
+  })).sort((a, b) => b.count - a.count);
+
+  const footnotes = files.has('word/footnotes.xml')
+    ? footnoteTexts(parse(files.get('word/footnotes.xml')), names).size : 0;
+
+  return { styles: list, footnotes, paragraphs };
+}
+
+/**
  * @param {ArrayBuffer} buffer  the .docx file
  * @param {object|null} overrides  style name -> rule, chosen by the author
  * @returns {{ markdown: string, report: object }}
@@ -349,23 +427,51 @@ export async function importDocx(buffer, overrides = null) {
   const blocks = [];
   const unknownStyles = new Map();
 
-  const body = documentXml.getElementsByTagNameNS(W, 'body')[0];
-  if (!body) throw new Error('متن این فایل پیدا نشد.');
+  /* How often each style is used, so a rare empty paragraph can be told from
+     an ordinary blank line. */
+  const styleCounts = new Map();
+  for (const p of Array.from(body0(documentXml).getElementsByTagNameNS(W, 'p'))) {
+    const el = p.getElementsByTagNameNS(W, 'pStyle')[0];
+    const id = el ? el.getAttributeNS(W, 'val') : null;
+    const nm = id ? (names.get(id) || id) : '';
+    styleCounts.set(nm, (styleCounts.get(nm) || 0) + 1);
+  }
+
+  const body = body0(documentXml);
 
   for (const p of Array.from(body.getElementsByTagNameNS(W, 'p'))) {
     const styleEl = p.getElementsByTagNameNS(W, 'pStyle')[0];
     const styleId = styleEl ? styleEl.getAttributeNS(W, 'val') : null;
     const styleName = styleId ? (names.get(styleId) || styleId) : '';
 
-    const rule = ruleFor(styles, styleId, styleName, p, overrides);
-    if (styleName && !STYLE_MAP[styleName] && !rule.recognised) {
-      unknownStyles.set(styleName, (unknownStyles.get(styleName) || 0) + 1);
-    }
-
-    if (rule.block === 'hr') { blocks.push({ kind: 'hr' }); continue; }
+    let rule = ruleFor(styles, styleId, styleName, p, overrides, styleCounts);
 
     let text = runsToMarkdown(p, names, footnoteOrder);
     text = clean(text);
+
+    /* The paragraph's own content overrules a guess made from its style -
+       a line of asterisks is a scene break whatever the style is called. */
+    if (!overrides || !overrides[styleName]) {
+      const own = p.getElementsByTagNameNS(W, 'jc')[0];
+      const align = own ? own.getAttributeNS(W, 'val')
+        : (styles.get(styleId) ? styles.get(styleId).align : null);
+
+      const clue = contentClue(text, align === 'center', !text.trim(), styleCounts, styleName);
+      if (clue) rule = clue;
+    }
+
+    if (styleName && !rule.recognised) {
+      unknownStyles.set(styleName, (unknownStyles.get(styleName) || 0) + 1);
+    }
+
+    if (rule.block === 'hr') {
+      // Never two rules in a row, however many blank paragraphs there were.
+      if (blocks.length && blocks[blocks.length - 1].kind === 'hr') continue;
+      blocks.push({ kind: 'hr' });
+      continue;
+    }
+
+    if (rule.block === 'skip') continue;
     if (!text.trim()) continue;
 
     /* A paragraph that is bold from end to end is not emphasis - it is a
@@ -421,11 +527,42 @@ export async function importDocx(buffer, overrides = null) {
   };
 }
 
+/* --------------------------------------------------------------------------
+   What the paragraph itself says
+
+   A style called «جداساز» in one manuscript is «جداکننده» in the next and
+   "Scene Break" in a third. No amount of cleverness will guess the word. But
+   what the paragraph CONTAINS is the same in all three: a line holding
+   nothing but asterisks, or holding nothing at all.
+
+   That is a clue no naming convention can take away.
+   -------------------------------------------------------------------------- */
+
+/* A line that is only symbols - ***, * * *, — — —, ~~~ - is a scene break in
+   every manuscript ever typed. */
+const SEPARATOR_TEXT = /^[\s*\u2022\u2014\u2013~#.\-_=+]{1,20}$/;
+
+function contentClue(text, isCentred, isEmpty, styleCounts, styleName) {
+  const trimmed = text.trim();
+
+  if (trimmed && SEPARATOR_TEXT.test(trimmed)) return { block: 'hr', recognised: true };
+
+  /* An empty paragraph in a style of its own, used a handful of times, is a
+     scene break made of white space - which is how a great many translators
+     mark one. An empty paragraph in the BODY style is just a blank line. */
+  if (isEmpty && styleName && styleCounts.get(styleName) <= 40
+      && styleName !== '' && isCentred) {
+    return { block: 'hr', recognised: true };
+  }
+
+  return null;
+}
+
 /**
- * What a paragraph should become. Four clues, in descending order of how much
+ * What a paragraph should become. The clues, in descending order of how much
  * they actually tell you.
  */
-function ruleFor(styles, styleId, styleName, paragraph, overrides) {
+function ruleFor(styles, styleId, styleName, paragraph, overrides, styleCounts) {
   // 0. Whatever the author said in the import dialog wins outright.
   if (overrides && overrides[styleName]) {
     return { ...overrides[styleName], recognised: true };
@@ -451,6 +588,48 @@ function ruleFor(styles, styleId, styleName, paragraph, overrides) {
   if (align === 'center') return { block: 'p', attrs: '.text-center', recognised: false };
 
   return { block: 'p', recognised: false };
+}
+
+/* --------------------------------------------------------------------------
+   What the studio can offer as a guess
+
+   Shown beside each unrecognised style in the import dialog, so the author is
+   choosing rather than starting from nothing.
+   -------------------------------------------------------------------------- */
+
+export const IMPORT_RULES = {
+  p: { label: 'پاراگراف عادی', rule: { block: 'p' } },
+  'p-noindent': { label: 'پاراگراف بدون تورفتگی', rule: { block: 'p', attrs: '.no-indent' } },
+  'p-center': { label: 'وسط‌چین', rule: { block: 'p', attrs: '.text-center' } },
+  h1: { label: 'عنوان یک', rule: { block: 'h1' } },
+  h2: { label: 'عنوان دو', rule: { block: 'h2' } },
+  h3: { label: 'عنوان سه', rule: { block: 'h3' } },
+  quote: { label: 'نقل‌قول', rule: { block: 'quote' } },
+  hr: { label: 'جداکننده', rule: { block: 'hr' } },
+  skip: { label: 'نادیده بگیر', rule: { block: 'skip' } },
+};
+
+/* A first guess for a style nobody has mapped yet. Word-shape first, then the
+   handful of Persian words that recur across manuscripts - not as a rule, but
+   as a starting point the author can overrule in one click. */
+const NAME_HINTS = [
+  [/جداساز|جداکننده|جدا‌کننده|separator|scene\s*break|ستاره/i, 'hr'],
+  [/بدنه|متن\s*اصلی|body|normal/i, 'p'],
+  [/ابتدا|شروع|آغاز|opening|first\s*para/i, 'p-noindent'],
+  [/عنوان|تیتر|title|heading/i, 'h2'],
+  [/نقل|نقل‌قول|quote|blockquote/i, 'quote'],
+  [/شناس|مشخصات|colophon|byline|نویسنده|مترجم/i, 'p-center'],
+  [/وسط|center|centre/i, 'p-center'],
+];
+
+function guessRule(styleName, isCentred, mostlyEmpty) {
+  if (mostlyEmpty) return 'hr';
+
+  for (const [pattern, key] of NAME_HINTS) {
+    if (pattern.test(styleName)) return key;
+  }
+
+  return isCentred ? 'p-center' : 'p';
 }
 
 /* --------------------------------------------------------------------------

@@ -49,7 +49,8 @@ const STYLE_MAP = {
   // a scene break is a rule, and the paragraph after it does not indent
   'جداکننده': { block: 'hr' },
   'متن بعد از جداکننده': { block: 'p', attrs: '.no-indent' },
-  'شروع داستان و جداساز': { block: 'p', attrs: '.no-indent' },
+  'شروع داستان و جداساز': { block: 'p', attrs: '.no-indent', boldFirst: true },
+  'ابتدای داستان': { block: 'p', attrs: '.no-indent', boldFirst: true },
 
   // quoted or set-apart matter
   'کج': { block: 'quote' },
@@ -173,16 +174,59 @@ function readStyles(stylesXml) {
     const outlineEl = style.getElementsByTagNameNS(W, 'outlineLvl')[0];
     const alignEl = style.getElementsByTagNameNS(W, 'jc')[0];
 
+    /* Bold and italic can live on the STYLE rather than on the text.
+       Word offers three places to put them and uses whichever the author
+       reached for: the run itself, a character style applied to the run, or
+       the paragraph style. Reading only the first - which is what this did -
+       loses every emphasis in a manuscript whose translator used styles, and
+       loses it silently. */
+    const runProps = style.getElementsByTagNameNS(W, 'rPr')[0];
+
     styles.set(id, {
       id,
       name: nameEl ? nameEl.getAttributeNS(W, 'val') : id,
       basedOn: baseEl ? baseEl.getAttributeNS(W, 'val') : null,
       outline: outlineEl ? Number(outlineEl.getAttributeNS(W, 'val')) : null,
       align: alignEl ? alignEl.getAttributeNS(W, 'val') : null,
+      bold: hasFlag(runProps, 'b'),
+      italic: hasFlag(runProps, 'i'),
     });
   }
 
   return styles;
+}
+
+/* Is a flag set on these run properties?
+
+   Persian text carries its formatting on the "complex script" variants - bCs
+   and iCs - as often as on the plain ones, because that is the field Word
+   uses for right-to-left runs. Checking only b and i misses half of them. */
+function hasFlag(props, which) {
+  if (!props) return false;
+
+  for (const tag of [which, which + 'Cs']) {
+    const el = props.getElementsByTagNameNS(W, tag)[0];
+    if (!el) continue;
+
+    // <w:b w:val="0"/> is Word switching it OFF again.
+    const val = el.getAttributeNS(W, 'val');
+    if (val === '0' || val === 'false') continue;
+
+    return true;
+  }
+
+  return false;
+}
+
+/** Follows basedOn upward to see whether a style ends up bold or italic. */
+function styleFlag(styles, id, flag, depth = 0) {
+  if (!id || depth > 8) return false;
+
+  const style = styles.get(id);
+  if (!style) return false;
+  if (style[flag]) return true;
+
+  return styleFlag(styles, style.basedOn, flag, depth + 1);
 }
 
 /* Word's own heading styles, under every id and name they ship with. */
@@ -220,7 +264,7 @@ function styleNames(styles) {
 }
 
 /** footnote id -> its text, already converted to Markdown. */
-function footnoteTexts(footnotesXml, names) {
+function footnoteTexts(footnotesXml, names, styles) {
   const notes = new Map();
   if (!footnotesXml) return notes;
 
@@ -228,9 +272,12 @@ function footnoteTexts(footnotesXml, names) {
     const id = note.getAttributeNS(W, 'id');
     if (Number(id) < 1) continue;   // -1 and 0 are Word's own separators
 
+    /* The footnote's own runs go through the same pass as the body, so a book
+       title in italics inside a note stays in italics. Passing null for the
+       footnote order is what stops a note referring to itself. */
     const parts = [];
     for (const p of Array.from(note.getElementsByTagNameNS(W, 'p'))) {
-      parts.push(runsToMarkdown(p, names, null).trim());
+      parts.push(runsToMarkdown(p, names, null, styles, null).trim());
     }
 
     // Word puts a space and often a full stop before the note's own text.
@@ -248,7 +295,7 @@ function footnoteTexts(footnotesXml, names) {
    them and the site's stylesheet decides them anyway.
    -------------------------------------------------------------------------- */
 
-function runsToMarkdown(paragraph, names, footnoteOrder) {
+function runsToMarkdown(paragraph, names, footnoteOrder, styles, paragraphStyleId) {
   /* Collected first, marked afterwards.
 
      WORD SPLITS A WORD ACROSS RUNS for reasons of its own - a spell-check
@@ -274,7 +321,7 @@ function runsToMarkdown(paragraph, names, footnoteOrder) {
       if (tag === 'hyperlink') {
         // The target lives in the relationships file; without it the text is
         // still correct, and a bare link is better than a broken one.
-        const inner = runsToMarkdown(child, names, footnoteOrder).trim();
+        const inner = runsToMarkdown(child, names, footnoteOrder, styles, paragraphStyleId).trim();
         if (inner) add(inner, false, false);
         continue;
       }
@@ -283,8 +330,15 @@ function runsToMarkdown(paragraph, names, footnoteOrder) {
 
       /* --- a run --- */
       const props = child.getElementsByTagNameNS(W, 'rPr')[0];
-      const bold = props && props.getElementsByTagNameNS(W, 'b').length > 0;
-      const italic = props && props.getElementsByTagNameNS(W, 'i').length > 0;
+
+      // A character style applied to this run, which may itself be bold.
+      const rStyleEl = props && props.getElementsByTagNameNS(W, 'rStyle')[0];
+      const rStyle = rStyleEl ? rStyleEl.getAttributeNS(W, 'val') : null;
+
+      const bold = hasFlag(props, 'b')
+        || (styles && styleFlag(styles, rStyle, 'bold'));
+      const italic = hasFlag(props, 'i')
+        || (styles && styleFlag(styles, rStyle, 'italic'));
 
       // A footnote reference has no text of its own.
       const ref = child.getElementsByTagNameNS(W, 'footnoteReference')[0];
@@ -305,6 +359,33 @@ function runsToMarkdown(paragraph, names, footnoteOrder) {
   };
 
   walk(paragraph);
+
+  /* The paragraph's own style can be bold or italic too, and then every run
+     inside it is - even the ones carrying no properties of their own. */
+  if (styles && paragraphStyleId) {
+    const pBold = styleFlag(styles, paragraphStyleId, 'bold');
+    const pItalic = styleFlag(styles, paragraphStyleId, 'italic');
+
+    if (pBold || pItalic) {
+      for (const piece of pieces) {
+        piece.bold = piece.bold || pBold;
+        piece.italic = piece.italic || pItalic;
+      }
+    }
+  }
+
+  /* A stretch that is nothing but space belongs to whatever surrounds it, not
+     to itself. Word emits «درد» and «ی » as two italic runs; if the trailing
+     space keeps its own markers the result is *درد**ی* - two words where there
+     was one. Merging a space-only stretch into its neighbour fixes it. */
+  for (let i = pieces.length - 1; i > 0; i--) {
+    if (pieces[i].text.trim() !== '') continue;
+    if (pieces[i].bold !== pieces[i - 1].bold) continue;
+    if (pieces[i].italic !== pieces[i - 1].italic) continue;
+
+    pieces[i - 1].text += pieces[i].text;
+    pieces.splice(i, 1);
+  }
 
   /* Now the markers, once per stretch. They go OUTSIDE the spaces: `**word **`
      is not bold in Markdown, because the closing marker has to touch a
@@ -397,7 +478,7 @@ export async function analyseDocx(buffer) {
   })).sort((a, b) => b.count - a.count);
 
   const footnotes = files.has('word/footnotes.xml')
-    ? footnoteTexts(parse(files.get('word/footnotes.xml')), names).size : 0;
+    ? footnoteTexts(parse(files.get('word/footnotes.xml')), names, styles).size : 0;
 
   return { styles: list, footnotes, paragraphs };
 }
@@ -417,7 +498,7 @@ export async function importDocx(buffer, overrides = null) {
 
   const styles = readStyles(stylesXml);
   const names = styleNames(styles);
-  const notes = footnoteTexts(footnotesXml, names);
+  const notes = footnoteTexts(footnotesXml, names, styles);
 
   /* Footnotes are renumbered in the order they appear in the text. Word's own
      ids are not sequential once notes have been added and deleted, and a
@@ -446,7 +527,7 @@ export async function importDocx(buffer, overrides = null) {
 
     let rule = ruleFor(styles, styleId, styleName, p, overrides, styleCounts);
 
-    let text = runsToMarkdown(p, names, footnoteOrder);
+    let text = runsToMarkdown(p, names, footnoteOrder, styles, styleId);
     text = clean(text);
 
     /* The paragraph's own content overrules a guess made from its style -
@@ -474,12 +555,19 @@ export async function importDocx(buffer, overrides = null) {
     if (rule.block === 'skip') continue;
     if (!text.trim()) continue;
 
-    /* A paragraph that is bold from end to end is not emphasis - it is a
-       display line, and its style has already said so. Carrying the markers
-       too would double up with the class. */
+    /* A paragraph bold from END TO END is a display line, not emphasis - its
+       style already says so, and carrying the markers too would double up with
+       the class. But bold on PART of a line is the author's own emphasis and
+       must survive, which is what unwrapWhole is careful about. */
     text = unwrapWhole(text);
 
     if (rule.wrap) text = `${rule.wrap}${text.trim()}${rule.wrap}`;
+
+    /* The opening paragraph of a story, with its first word set bold. Some
+       translators do this with a character style Word records; some do it by
+       hand; some rely on the paragraph style alone, in which case nothing in
+       the file says so and only the author can. */
+    if (rule.boldFirst) text = boldFirstWord(text);
 
     blocks.push({ kind: rule.block, text, attrs: rule.attrs || null });
   }
@@ -600,6 +688,10 @@ function ruleFor(styles, styleId, styleName, paragraph, overrides, styleCounts) 
 export const IMPORT_RULES = {
   p: { label: 'پاراگراف عادی', rule: { block: 'p' } },
   'p-noindent': { label: 'پاراگراف بدون تورفتگی', rule: { block: 'p', attrs: '.no-indent' } },
+  'p-opening': {
+    label: 'شروع داستان (بدون تورفتگی، کلمه‌ی اول ضخیم)',
+    rule: { block: 'p', attrs: '.no-indent', boldFirst: true },
+  },
   'p-center': { label: 'وسط‌چین', rule: { block: 'p', attrs: '.text-center' } },
   h1: { label: 'عنوان یک', rule: { block: 'h1' } },
   h2: { label: 'عنوان دو', rule: { block: 'h2' } },
@@ -615,7 +707,7 @@ export const IMPORT_RULES = {
 const NAME_HINTS = [
   [/جداساز|جداکننده|جدا‌کننده|separator|scene\s*break|ستاره/i, 'hr'],
   [/بدنه|متن\s*اصلی|body|normal/i, 'p'],
-  [/ابتدا|شروع|آغاز|opening|first\s*para/i, 'p-noindent'],
+  [/ابتدا|شروع|آغاز|opening|first\s*para/i, 'p-opening'],
   [/عنوان|تیتر|title|heading/i, 'h2'],
   [/نقل|نقل‌قول|quote|blockquote/i, 'quote'],
   [/شناس|مشخصات|colophon|byline|نویسنده|مترجم/i, 'p-center'],
@@ -640,6 +732,18 @@ function guessRule(styleName, isCentred, mostlyEmpty) {
    than being hunted down later.
    -------------------------------------------------------------------------- */
 
+/** Sets the first word in bold, unless it already carries emphasis. */
+function boldFirstWord(text) {
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith('*')) return text;   // already emphasised
+
+  const lead = text.slice(0, text.length - trimmed.length);
+  const match = trimmed.match(/^(\S+)([\s\S]*)$/);
+  if (!match) return text;
+
+  return `${lead}**${match[1]}**${match[2]}`;
+}
+
 /* Strips markers that wrap the entire paragraph. */
 function unwrapWhole(text) {
   const trimmed = text.trim();
@@ -660,7 +764,12 @@ function clean(text) {
   return String(text)
     .replace(/\u00a0/g, ' ')        // Word's non-breaking space
     .replace(/\u0640+/g, '')        // kashida, a typesetting artefact
-    .replace(/[\u064b-\u0652]/g, '') // harakat
+    /* HARAKAT, BUT NOT THE TANWIN. U+064B sits at the start of the harakat
+       range, so stripping the range took «لطفاً» down to «لطفا» - and that is
+       not a decoration coming off, it is a spelling being broken. The tanwin
+       is part of how the word is written in Persian; fatha, kasra and damma
+       are not. The range now starts one codepoint later. */
+    .replace(/[\u064c-\u0652]/g, '')
     .replace(/\u064a/g, '\u06cc')   // Arabic ya  -> Persian
     .replace(/\u0649/g, '\u06cc')   // alef maqsura
     .replace(/\u0643/g, '\u06a9')   // Arabic kaf -> Persian

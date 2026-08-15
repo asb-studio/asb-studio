@@ -39,6 +39,7 @@ import {
 } from './model/track.js';
 import { diffSummary, changeList, resolveChange } from './markdown/diff.js';
 import { buildReviewReport } from './export/review-report.js';
+import { importDocx as readDocx } from './import/docx.js';
 import { migrateBody, findRemainingHtml } from './markdown/migrate.js';
 import { MarkdownEditor } from './editor/editor.js';
 import { Sidebar } from './ui/sidebar.js';
@@ -1315,6 +1316,71 @@ const ctx = {
     app.present = [];
     updateStatusBar();
     toast('خارج شدی');
+  },
+
+  /* A Word manuscript, read straight into Markdown.
+     Everything the author already did in Word - headings, footnotes, scene
+     breaks, centred lines - survives, because Word records those as named
+     styles and this reads the names. What does not survive is colour, font
+     and size, which Markdown has no way to say and the site decides anyway. */
+  async importDocx() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.docx';
+
+    const file = await new Promise((resolve) => {
+      input.addEventListener('change', () => resolve(input.files[0] || null));
+      input.click();
+    });
+    if (!file) return;
+
+    toast('در حال خواندن فایل ورد…');
+
+    let result;
+    try {
+      result = await readDocx(await file.arrayBuffer());
+    } catch (err) {
+      dialog.say('خوانده نشد', String(err.message || err));
+      return;
+    }
+
+    const { markdown, report } = result;
+
+    const node = document.createElement('div');
+    node.innerHTML = `
+      <div class="stats__grid">
+        <div class="stats__cell"><span class="stats__value">${fa(report.paragraphs)}</span>
+          <span class="stats__label">پاراگراف</span></div>
+        <div class="stats__cell"><span class="stats__value">${fa(report.headings)}</span>
+          <span class="stats__label">عنوان</span></div>
+        <div class="stats__cell"><span class="stats__value">${fa(report.footnotes)}</span>
+          <span class="stats__label">پانویس</span></div>
+        <div class="stats__cell"><span class="stats__value">${fa(report.breaks)}</span>
+          <span class="stats__label">جداکننده</span></div>
+      </div>
+      ${report.unknownStyles.length ? `
+        <div class="stats__section">
+          <h3>استایل‌هایی که نشناخت</h3>
+          <p class="empty">این‌ها پاراگراف عادی شدند. اگر معنایی داشتند، بگو تا اضافه کنم.</p>
+          ${report.unknownStyles.slice(0, 8).map((s) => `
+            <div class="stats__row"><span>${esc(s.name)}</span>
+              <span class="spacer"></span>
+              <span class="count">${fa(s.count)} بار</span></div>`).join('')}
+        </div>` : ''}
+      <p class="dialog__text" style="color:var(--fg-dim);font-size:0.79rem">
+        نیم‌فاصله، فاصله‌ی سخت، کشیده، اعراب و «ی» و «ک» عربی هم سرِ راه تمیز شدند.
+        شناسنامه و شناسه‌ی پاراگراف‌ها را باید خودت اضافه کنی.
+      </p>`;
+
+    const go = await dialog.custom('فایل ورد خوانده شد', node, [
+      { label: 'انصراف', value: false, cancel: true },
+      { label: 'باز کن', value: true, primary: true },
+    ], { wide: true });
+    if (!go) return;
+
+    const name = file.name.replace(/\.docx$/i, '.md');
+    openInTab(name, markdown, null);
+    toast(`${fa(report.paragraphs)} پاراگراف و ${fa(report.footnotes)} پانویس وارد شد`);
   },
 
   browseArchive() {

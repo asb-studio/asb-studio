@@ -273,17 +273,86 @@ export class MarkdownEditor {
     this.view.focus();
   }
 
-  /** Wraps the selection, or drops the markers at the caret ready to type in. */
+  /* --------------------------------------------------------------------------
+     Bold, italic, and the rest: a SWITCH, not a stamp
+
+     This used to add markers and nothing else, so pressing Ctrl+B twice gave
+     ****کلمه**** and a third press gave six asterisks. Every editor ever
+     written treats these as a toggle, and rightly: the second press is the
+     reader asking to undo the first, not to do it harder.
+
+     Two cases have to be told apart, because Word and CodeMirror both get
+     this wrong at least once:
+
+       the markers are INSIDE the selection   «**کلمه**» selected -> strip them
+       the markers are OUTSIDE the selection  «کلمه» selected, ** on each side
+                                              -> strip those instead
+
+     The second is what happens after the first press: the selection is left
+     around the word, the markers just beyond it. Looking only inside would
+     miss them and stack another pair on top.
+     -------------------------------------------------------------------------- */
   wrapSelection(before, after = before) {
     const { state } = this.view;
-    this.view.dispatch(state.changeByRange((range) => ({
-      changes: [
-        { from: range.from, insert: before },
-        { from: range.to, insert: after },
-      ],
-      // The selection keeps covering the same words, now inside the markers.
-      range: EditorSelection.range(range.from + before.length, range.to + before.length),
-    })));
+
+    this.view.dispatch(state.changeByRange((range) => {
+      const doc = state.doc;
+      const selected = doc.sliceString(range.from, range.to);
+
+      /* --- already wrapped, markers inside the selection --- */
+      if (selected.length >= before.length + after.length
+          && selected.startsWith(before) && selected.endsWith(after)) {
+        const inner = selected.slice(before.length, selected.length - after.length);
+
+        return {
+          changes: { from: range.from, to: range.to, insert: inner },
+          range: EditorSelection.range(range.from, range.from + inner.length),
+        };
+      }
+
+      /* --- already wrapped, markers just outside the selection --- */
+      const outerFrom = range.from - before.length;
+      const outerTo = range.to + after.length;
+
+      if (outerFrom >= 0 && outerTo <= doc.length
+          && doc.sliceString(outerFrom, range.from) === before
+          && doc.sliceString(range.to, outerTo) === after) {
+        return {
+          changes: { from: outerFrom, to: outerTo, insert: selected },
+          range: EditorSelection.range(outerFrom, outerFrom + selected.length),
+        };
+      }
+
+      /* --- not wrapped: put the markers on ---
+
+         They go OUTSIDE any spaces the selection happens to include. `**word **`
+         is not bold in Markdown - the closing marker has to touch a non-space -
+         and a double-click in Persian very often takes the trailing space with
+         the word. */
+      const head = selected.match(/^\s*/)[0];
+      const tail = selected.match(/\s*$/)[0];
+      const core = selected.slice(head.length, selected.length - tail.length);
+
+      // Nothing selected: drop the markers in and put the caret between them,
+      // ready to type.
+      if (!core) {
+        return {
+          changes: { from: range.from, to: range.to, insert: before + after },
+          range: EditorSelection.cursor(range.from + before.length),
+        };
+      }
+
+      const insert = `${head}${before}${core}${after}${tail}`;
+
+      return {
+        changes: { from: range.from, to: range.to, insert },
+        range: EditorSelection.range(
+          range.from + head.length + before.length,
+          range.from + head.length + before.length + core.length
+        ),
+      };
+    }));
+
     this.view.focus();
   }
 

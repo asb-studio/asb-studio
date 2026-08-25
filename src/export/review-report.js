@@ -24,6 +24,7 @@ import { diffWords, diffSummary } from '../markdown/diff.js';
 import { findChanges } from '../markdown/critic.js';
 import { createRenderer } from '../markdown/preview.js';
 import { textDirection } from '../markdown/direction.js';
+import { expandSiteBlocks } from '../markdown/site-blocks.js';
 
 const renderer = createRenderer();
 
@@ -147,11 +148,14 @@ function markedSource(before, after) {
 }
 
 function render(source) {
-  let html = renderer.render(
+  const prepared = expandSiteBlocks(
     source
       .replace(/<!--\s*(EREADER-START|PAYWALL)\s*-->/g, '')
-      .replace(/\\(\r?\n)/g, '$1')
+      .replace(/\\(\r?\n)/g, '$1'),
+    renderer
   );
+
+  let html = renderer.render(prepared);
 
   // Sentinels become real elements only after Markdown has run, so a mark
   // spanning a bold word or a link cannot break the syntax around it.

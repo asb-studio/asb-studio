@@ -159,3 +159,101 @@
   background: rgba(224, 107, 99, 0.14); color: var(--err);
   text-decoration: line-through;
 }
+
+/* --------------------------------------------------------------------------
+   The guide's classes and site blocks
+   These mirror what build.py + the site stylesheet produce, so the preview
+   keeps telling the truth about /// callouts, definition lists, abbreviations
+   and the typographic classes RAHNAMANEVESHTAN.md documents.
+   -------------------------------------------------------------------------- */
+
+.preview .pullquote {
+  font-size: 1.18em; font-weight: 700; text-align: center; text-indent: 0;
+  max-width: 34ch; margin: 2.2em auto; padding: 1em 0;
+  border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent);
+}
+.preview .colophon {
+  font-size: 0.78rem; color: var(--fg-faint);
+  text-align: left; text-indent: 0; margin-top: 2.6em;
+}
+.preview .editor-note {
+  font-size: 0.8rem; font-style: italic; color: var(--fg-dim); text-indent: 0;
+  margin-top: 1.8em; padding-top: 0.7em; border-top: 1px solid var(--accent);
+}
+.preview .small { font-size: 0.85em; color: var(--fg-dim); }
+.preview .mag-article-deck { font-size: 1.12em; color: var(--fg-dim); text-indent: 0; }
+.preview .story-deck { font-size: 0.95em; color: var(--fg-dim); text-indent: 0; }
+
+.preview mark {
+  background: var(--accent-wash); color: inherit;
+  padding: 0 2px; border-radius: 3px;
+}
+
+/* The scene-break div is empty; the site's CSS prints the stars. So does the
+   preview - and in the book the same div is white space, per the guide. */
+.preview .scene-break { text-indent: 0; text-align: center; margin: 2.6em 0; }
+.preview .scene-break::before {
+  content: '* * *'; color: var(--accent); letter-spacing: 0.6em;
+}
+
+/* The lead-in of a work: the first bold of the opening paragraph turns ochre,
+   the way the reader and the excerpt box dress it on the site. */
+.preview > p:first-of-type strong:first-child { color: var(--accent-strong); }
+
+/* --- /// callouts ----------------------------------------------------------
+   Classes are exactly what pymdownx.blocks.admonition emits on the site
+   (div.admonition.{type}); the tones here mirror RAHNAMANEVESHTAN.md:
+   note/important/hint = ochre, tip = blue, the rest = red. When the site's
+   own stylesheet grows its rules, these are the same hooks. */
+
+.preview .admonition {
+  margin: 1.8em 0; padding: 14px 18px;
+  border: 1px solid var(--line); border-inline-start: 3px solid var(--accent);
+  border-radius: var(--radius-sm); background: var(--panel);
+}
+.preview .admonition p { text-indent: 0; }
+.preview .admonition-title {
+  font-weight: 700; font-size: 0.85rem; margin: 0 0 0.5em; text-indent: 0;
+}
+.preview .admonition.note,
+.preview .admonition.important,
+.preview .admonition.hint { border-inline-start-color: var(--accent); }
+.preview .admonition.note .admonition-title,
+.preview .admonition.important .admonition-title,
+.preview .admonition.hint .admonition-title { color: var(--accent-strong); }
+
+.preview .admonition.tip { border-inline-start-color: var(--link); }
+.preview .admonition.tip .admonition-title { color: var(--link); }
+
+.preview .admonition.warning,
+.preview .admonition.attention,
+.preview .admonition.caution,
+.preview .admonition.danger,
+.preview .admonition.error { border-inline-start-color: var(--err); }
+.preview .admonition.warning .admonition-title,
+.preview .admonition.attention .admonition-title,
+.preview .admonition.caution .admonition-title,
+.preview .admonition.danger .admonition-title,
+.preview .admonition.error .admonition-title { color: var(--err); }
+
+.preview details.admonition {
+  margin: 1.8em 0; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--panel);
+}
+.preview details.admonition summary {
+  cursor: pointer; padding: 10px 16px; font-weight: 700; font-size: 0.9rem;
+  color: var(--accent-strong);
+}
+.preview details.admonition[open] summary { border-bottom: 1px solid var(--line); }
+.preview details.admonition > *:not(summary) { margin: 14px 18px; }
+
+/* --- definition lists and abbreviations ----------------------------------- */
+
+.preview dl { margin: 1.6em 0; }
+.preview dt { font-weight: 700; margin-top: 0.9em; text-indent: 0; }
+.preview dd {
+  margin: 0.2em 1.6em 0.6em 0; color: var(--fg-dim); text-indent: 0;
+}
+.preview abbr[title] {
+  text-decoration: underline dotted; text-underline-offset: 3px; cursor: help;
+}

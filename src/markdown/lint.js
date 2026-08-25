@@ -8,7 +8,9 @@
    Python-Markdown with:
 
        extensions = ['extra', 'tables', 'attr_list', 'footnotes',
-                     'pymdownx.blocks.html']
+                     'pymdownx.blocks.html', 'pymdownx.tilde',
+                     'pymdownx.blocks.admonition', 'pymdownx.blocks.details',
+                     'codehilite']
        footnotes SEPARATOR = '-'
 
    Every rule below was verified by running that exact configuration. The
@@ -18,6 +20,8 @@
 
    This module must never touch the DOM.
    ========================================================================== */
+
+import { KNOWN_FIELDS } from '../model/schema.js';
 
 export const SEVERITY = { ERROR: 'error', WARN: 'warn', INFO: 'info' };
 
@@ -54,7 +58,6 @@ const FIXABLE = new Set([
   'heading-attr-own-line',
   'backslash-break',
   'pandoc-span',
-  'sources-heading',
   'frontmatter-in-body',
 ]);
 
@@ -220,22 +223,44 @@ function ruleDuplicateIds(lines, skip, out) {
   });
 }
 
-/* R6. Sources heading wording.
-   build.py wraps the sources block by searching an h2/h3/h4 whose text
-   contains «سرچشمه». A heading that says «منابع» is never matched, so the
-   sources-container styling is silently skipped. */
-function ruleSourcesHeading(lines, skip, out) {
+/* R6. The excerpt must be a closed PAIR, and both ends must sit BEFORE the
+   paywall. RAHNAMANEVESHTAN.md is blunt about this: برشی که بعد از
+   PAYWALL باشد از دلِ متن پولی برداشته می‌شود و روی صفحه‌ی عمومی لو می‌رود -
+   and the system does not stop it. This is the one lint rule that catches a
+   leak rather than a cosmetic break, which is why it errors. */
+function ruleExcerptOrder(lines, out) {
+  let startLine = -1;
+  let endLine = -1;
+  let wallLine = -1;
+
   lines.forEach((line, i) => {
-    if (skip.has(i)) return;
-    if (/^#{1,6}\s/.test(line) && /منابع/.test(line) && !/سرچشمه/.test(line)) {
-      out.push(finding(
-        'sources-heading', SEVERITY.WARN, i,
-        'build.py دنبال «سرچشمه‌ها» می‌گردد، نه «منابع». با این عنوان، بلوک سرچشمه‌ها استایل نمی‌گیرد.',
-        line.trim(),
-        line.replace(/منابع/, 'سرچشمه‌ها')
-      ));
-    }
+    if (/<!--\s*EXCERPT-START\s*-->/.test(line) && startLine === -1) startLine = i;
+    if (/<!--\s*EXCERPT-END\s*-->/.test(line) && endLine === -1) endLine = i;
+    if (/<!--\s*PAYWALL\s*-->/.test(line) && wallLine === -1) wallLine = i;
   });
+
+  if (startLine !== -1 && endLine === -1) {
+    out.push(finding(
+      'excerpt-unclosed', SEVERITY.ERROR, startLine,
+      '«EXCERPT-START» هست ولی «EXCERPT-END» نیست. بدون پایان، برش درست بسته نمی‌شود.',
+      '<!-- EXCERPT-START -->', null
+    ));
+  }
+  if (endLine !== -1 && startLine === -1) {
+    out.push(finding(
+      'excerpt-unopened', SEVERITY.ERROR, endLine,
+      '«EXCERPT-END» بدون «EXCERPT-START» است. بریده همیشه جفت است.',
+      '<!-- EXCERPT-END -->', null
+    ));
+  }
+  if (wallLine !== -1 && startLine !== -1 && Math.max(startLine, endLine) > wallLine) {
+    out.push(finding(
+      'excerpt-after-paywall', SEVERITY.ERROR, startLine,
+      'برش نمایشی بعد از دیوار پرداخت است — متن پولی به صفحه‌ی عمومی لو می‌رود و سیستم جلویش را نمی‌گیرد. '
+      + 'برش را بالای <!-- PAYWALL --> ببر.',
+      '', null
+    ));
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -258,9 +283,35 @@ export function lintBody(body) {
   rulePandocSpan(lines, skip, out);
   ruleFootnotes(body, lines, skip, out);
   ruleDuplicateIds(lines, skip, out);
-  ruleSourcesHeading(lines, skip, out);
+  ruleExcerptOrder(lines, out);
 
   return out.sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule));
+}
+
+/* An empty frontmatter key is not a style problem - build.py refuses the
+   whole file ("a frontmatter key was left empty") and the work silently
+   never reaches the site. reader: false and premium: false are answers,
+   not empties, and are never reported. */
+function emptyFrontmatterKeys(fm) {
+  const found = [];
+
+  for (const key of fm.keys()) {
+    if (!KNOWN_FIELDS.includes(key)) continue;
+    const entry = fm.entries.find((e) => e.kind === 'field' && e.key === key);
+    if (!entry) continue;
+
+    const empty =
+      entry.valueType === 'empty' || entry.valueType === 'null' ||
+      entry.value === null || entry.value === undefined ||
+      (typeof entry.value === 'string' && entry.value.trim() === '') ||
+      (Array.isArray(entry.value) && entry.value.length === 0);
+
+    if (empty && typeof entry.value !== 'boolean') {
+      found.push({ key, line: null });
+    }
+  }
+
+  return found;
 }
 
 /**
@@ -280,6 +331,15 @@ export function lintDocument(doc) {
       rule: 'frontmatter-in-body', severity: SEVERITY.ERROR, line: 1,
       message: 'یک بلوک فرانت‌متر داخل خودِ متن است. شناسنامه جای پنل «آماده‌ی انتشار» است، نه ستون متن.',
       excerpt: doc.body.split('\n').slice(0, 3).join('\n'), fix: null, fixable: true,
+    });
+  }
+
+  for (const { key } of emptyFrontmatterKeys(fm)) {
+    out.unshift({
+      rule: 'empty-frontmatter-key', severity: SEVERITY.ERROR, line: 0,
+      message: `خانه‌ی «${key}» خالی است و build.py کل فایل را رد می‌کند — اثر روی سایت نمی‌آید. `
+        + 'خطش را پاک کن یا از «مرتب کردن شناسنامه» کمک بگیر.',
+      excerpt: `${key}:`, fix: null,
     });
   }
 

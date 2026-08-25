@@ -26,14 +26,13 @@
  */
 export const CATEGORIES = {
   'novel': 'رمان',
+  'novelette': 'داستان بلند',
   'short-story/single': 'تک‌داستان کوتاه',
   'short-story/collection': 'مجموعه‌داستان کوتاه',
   'flash-fiction/single': 'تک‌داستان برق‌آسا',
   'flash-fiction/collection': 'مجموعه‌داستان برق‌آسا',
   'non-fiction/essay/single': 'تک‌جستار',
   'non-fiction/essay/collection': 'مجموعه‌جستار',
-  'non-fiction/article/single': 'تک‌مقاله',
-  'non-fiction/article/collection': 'مجموعه‌مقاله',
   'magazine': 'مجله‌ی اسب',
   'creators': 'پدیدآورندگان',
 };
@@ -96,63 +95,55 @@ export const BLOCK_COLOURS = {
    still read, still written, and still shown to the author as preserved -
    it simply has no dedicated input. */
 export const KNOWN_FIELDS = [
-  'book_id', 'title', 'slug', 'author', 'translator', 'editor',
-  'category', 'series', 'language', 'reader', 'premium', 'price',
-  'date', 'cover', 'image', 'tags', 'summary',
+  'book_id', 'title', 'slug',
+  'author', 'translator', 'editor',
+  'category', 'section', 'issue', 'series',
+  'language', 'reader', 'premium',
+  'date', 'release_date', 'release_time',
+  'cover', 'image', 'cover_caption',
+  'tags',
+  'price', 'preorder_price', 'sale_price', 'sale_until', 'special_price',
+  'hook', 'formats', 'summary_en', 'summary',
 ];
 
 /* --------------------------------------------------------------------------
    The canonical frontmatter block
 
-   Every saved work carries these keys, in this order, whether or not they
-   have a value. Two reasons:
+   THE ORDER IS THE GUIDE'S ORDER (RAHNAMANEVESHTAN.md, بخش دو), top to
+   bottom, with summary last because it is the longest.
 
-     - a file you can read at a glance, because the fields are always in the
-       same place
-     - a diff that shows what actually changed, instead of a block reshuffling
-       itself every time a field is added
-
-   DEFAULTS MATTER MORE THAN THEY LOOK. Empty text is written as "" and never
-   as null, because build.py does post.get('author', '').strip() - and .strip()
-   on None raises, which the outer try/except swallows, and the whole file is
-   then skipped from the build without a word. `series` is the exception:
-   build.py reads it without .strip(), and null is what it expects.
+   THE DEFAULTS ARE STRUCTURAL ONLY. build.py refuses a file whose frontmatter
+   carries an empty key ("a frontmatter key was left empty"), so normalizing
+   must never stamp out title: "" or author: "". A key is written when it has
+   something to say, and not before - which is exactly what the guide asks
+   for: خانه‌ای که لازم نداری را کلاً پاک کن.
    -------------------------------------------------------------------------- */
 
 export const FIELD_ORDER = [
   'book_id', 'title', 'slug',
   'author', 'translator', 'editor',
-  'category', 'series', 'language',
-  'reader', 'premium', 'date',
-  'cover', 'tags',
+  'category', 'section', 'issue', 'series',
+  'language', 'reader', 'premium',
+  'date', 'release_date', 'release_time',
+  'cover', 'image', 'cover_caption',
+  'tags',
+  'price', 'preorder_price', 'sale_price', 'sale_until', 'special_price',
+  'hook', 'formats', 'summary_en', 'summary',
 ];
 
 export const FIELD_DEFAULTS = {
   book_id: () => newBookId(),
-  title: () => '',
-  slug: () => '',
-  author: () => '',
-  translator: () => '',
-  editor: () => '',
   category: () => 'short-story/single',
-  series: () => null,
   language: () => 'fa',
   reader: () => false,
   premium: () => false,
   date: () => todayJalali(),
-  cover: () => '',
-  tags: () => [],
 };
 
 /* Creator profiles get the same treatment in their own order. */
-export const CREATOR_ORDER = ['name', 'slug', 'image', 'roles', 'socials'];
+export const CREATOR_ORDER = ['name', 'slug', 'category', 'image', 'roles', 'socials'];
 
-export const CREATOR_DEFAULTS = {
-  name: () => '',
-  slug: () => '',
-  image: () => '',
-  roles: () => [],
-};
+export const CREATOR_DEFAULTS = {};
 
 /* Rough Jalali date for today, so a new file is not stamped 1400-01-01.
    Good to the day, which is all a publication date needs. */
@@ -206,7 +197,24 @@ export const PERSIAN_MONTHS = [
 export const MARKERS = {
   ereader: '<!-- EREADER-START -->',
   paywall: '<!-- PAYWALL -->',
+  excerptStart: '<!-- EXCERPT-START -->',
+  excerptEnd: '<!-- EXCERPT-END -->',
+  /* Kept for older call sites; the excerpt is the PAIR, never a lone end. */
   excerpt: '<!-- EXCERPT-END -->',
+};
+
+/* The nine words /// blocks understand, grouped by the tone the site paints
+   them with. RAHNAMANEVESHTAN.md, بخش نه. */
+export const ADMONITION_KINDS = {
+  note: { tone: 'ochre', label: 'یادداشت' },
+  important: { tone: 'ochre', label: 'مهم' },
+  hint: { tone: 'ochre', label: 'تذکر' },
+  tip: { tone: 'blue', label: 'راهنما' },
+  warning: { tone: 'red', label: 'هشدار' },
+  attention: { tone: 'red', label: 'توجه' },
+  caution: { tone: 'red', label: 'احتیاط' },
+  danger: { tone: 'red', label: 'خطر' },
+  error: { tone: 'red', label: 'خطا' },
 };
 
 /** Generates a v4 UUID for book_id, the same shape build.py expects. */

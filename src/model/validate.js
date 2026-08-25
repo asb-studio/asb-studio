@@ -137,6 +137,46 @@ export function validateDocument(doc) {
       'حالت مطالعه فعال است ولی نقطه‌ی شروع مطالعه گذاشته نشده. صفحه بدون مقدمه ساخته می‌شود.'));
   }
 
+  /* --- پیش‌خرید و تخفیف — RAHNAMANEVESHTAN.md، بخش یازده ------------------ */
+
+  const releaseDate = String(fm.get('release_date') || '').trim();
+  if (releaseDate) {
+    if (premium !== true) {
+      out.push(issue('release_date', 'block',
+        'تاریخ پیش‌خرید دارد ولی premium روشن نیست. با premium: false متن اثر اصلاً رندر نمی‌شود و صفحه فقط معرفی و شمارش معکوس می‌ماند.'));
+    }
+    if (!DATE_OK.test(releaseDate)) {
+      out.push(issue('release_date', 'block', 'قالب release_date باید "1405-08-01" باشد، گیومه‌دار و دورقمی.'));
+    }
+    if (!fm.has('preorder_price')) {
+      out.push(issue('preorder_price', 'warn', 'قیمت پیش‌خرید ندارد؛ تا روز انتشار همان price نشان داده می‌شود.'));
+    }
+    if (!fm.has('formats')) {
+      out.push(issue('formats', 'warn', 'فهرست قالب‌های عرضه خالی است — روی صفحه‌ی پیش‌خرید چاپ می‌شود.'));
+    }
+  }
+
+  const releaseTime = String(fm.get('release_time') || '').trim();
+  if (releaseTime && !/^\d{1,2}:\d{2}$/.test(releaseTime)) {
+    out.push(issue('release_time', 'warn', 'قالب release_time باید "20:00" باشد، گیومه‌دار.'));
+  }
+
+  const rawSale = fm.get('sale_price');
+  if (rawSale !== undefined && rawSale !== null && String(rawSale).trim() !== '') {
+    if (Number.isFinite(Number(fm.get('price'))) && Number(rawSale) >= Number(fm.get('price'))) {
+      out.push(issue('sale_price', 'warn',
+        'قیمت تخفیف‌خورده از price کمتر نیست. سیستم تخفیف را نادیده می‌گیرد و همان price را می‌گیرد.'));
+    }
+    const saleUntil = String(fm.get('sale_until') || '').trim();
+    if (saleUntil && !DATE_OK.test(saleUntil)) {
+      out.push(issue('sale_until', 'warn', 'قالب sale_until باید "1405-06-31" باشد، گیومه‌دار و دورقمی.'));
+    }
+    if (releaseDate) {
+      out.push(issue('sale_price', 'warn',
+        'تخفیف روی اثر پیش‌خرید تا روز انتشار نمی‌افتد؛ تا آن روز قیمت همان preorder_price است.'));
+    }
+  }
+
   if (!body.trim()) out.push(issue('body', 'block', 'متن خالی است.'));
 
   // Python-Markdown does not understand CriticMarkup and would print the

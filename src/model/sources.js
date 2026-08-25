@@ -1,13 +1,11 @@
-/* ==========================================================================
-   model/sources.js
-   --------------------------------------------------------------------------
-   The sources list at the foot of a piece.
-
-   build.py finds this block by looking for a heading whose text contains
+/* build.py finds this block by looking for a heading whose text contains
    «سرچشمه», wraps everything from there to the end in .sources-container, and
    sets the direction of each item by its own language. So the block is not
    free-form prose: its heading has to match, and it has to be a list.
 
+   RAHNAMANEVESHTAN.md, بخش هشت: five headings are accepted - سرچشمه،
+   سرچشمه‌ها، کتابنامه، کتاب‌نامه، منابع - and all of them wrap. The studio
+   reads the same five so the panel never pretends a working block is absent.
    Getting that right by hand every time is exactly the kind of thing a tool
    should do, which is why the studio can now read and write it rather than
    leaving it to memory.
@@ -15,7 +13,7 @@
    This module must never touch the DOM.
    ========================================================================== */
 
-const HEADING = /^(#{2,4})\s*(سرچشمه‌ها|سرچشمه|منابع|منبع)\s*$/;
+const HEADING = /^(#{2,4})\s*(سرچشمه‌ها|سرچشمه|کتابنامه|کتاب‌نامه|منابع|منبع)\s*$/;
 const ITEM = /^\s*(?:\d+[.)]|[-*+])\s+(.*)$/;
 
 /** The heading the site actually looks for. */

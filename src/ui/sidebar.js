@@ -26,7 +26,10 @@ const enDigits = (s) => String(s).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸
 const CHEVRON = `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 
-/* Which fields live in which card, per kind of document. */
+/* Which fields live in which card, per kind of document. The access card is
+   conditional: preorder fields appear only when release_date exists, and the
+   money fields only when premium is on - the guide's templates never carry
+   them otherwise, and an empty key is exactly what build.py refuses. */
 const CREATOR_CARDS = [
   { id: 'who', title: 'پدیدآورنده', fields: ['name', 'slug'] },
   { id: 'roles', title: 'نقش‌ها', fields: ['roles'] },
@@ -35,20 +38,26 @@ const CREATOR_CARDS = [
 ];
 
 const CARDS = [
-  { id: 'identity', title: 'شناسنامه', fields: ['title', 'slug', 'category', 'series', 'language'] },
+  { id: 'identity', title: 'شناسنامه', fields: ['title', 'slug', 'category', 'section', 'issue', 'series', 'language'] },
   { id: 'people', title: 'پدیدآورندگان', fields: ['author', 'translator', 'editor'] },
-  { id: 'publish', title: 'انتشار', fields: ['date', 'tags', 'summary'] },
-  { id: 'access', title: 'دسترسی', fields: ['reader', 'premium', 'price'] },
-  { id: 'media', title: 'تصاویر', fields: ['cover', 'image'] },
+  { id: 'publish', title: 'انتشار', fields: ['date', 'release_date', 'release_time', 'tags', 'summary_en', 'summary'] },
+  { id: 'access', title: 'دسترسی و فروش', fields: ['reader', 'premium', 'price', 'preorder_price', 'hook', 'formats', 'sale_price', 'sale_until', 'special_price'] },
+  { id: 'media', title: 'تصاویر', fields: ['cover', 'cover_caption', 'image'] },
   { id: 'system', title: 'سیستمی', fields: ['book_id'] },
 ];
 
 const LABELS = {
   name: 'نام', roles: 'نقش‌ها', socials: 'شبکه‌ها',
-  title: 'عنوان', slug: 'اسلاگ (نام فایل)', category: 'دسته‌بندی', series: 'مجموعه',
+  title: 'عنوان', slug: 'اسلاگ (نام فایل)', category: 'دسته‌بندی',
+  section: 'بخش (مجله)', issue: 'شماره‌ی مجله', series: 'مجموعه',
   language: 'زبان', author: 'نویسنده', translator: 'مترجم', editor: 'ویراستار',
-  date: 'تاریخ انتشار', tags: 'هشتگ‌ها', summary: 'خلاصه', reader: 'حالت مطالعه',
-  premium: 'اثر پولی', price: 'قیمت (تومان)', cover: 'کاور (۳:۴)', image: 'عکس پدیدآورنده',
+  date: 'تاریخ انتشار', release_date: 'تاریخ انتشار (پیش‌خرید)', release_time: 'ساعت انتشار',
+  tags: 'هشتگ‌ها', summary: 'چکیده', summary_en: 'چکیده‌ی انگلیسی',
+  reader: 'حالت مطالعه', premium: 'اثر پولی',
+  price: 'قیمت (تومان)', preorder_price: 'قیمت پیش‌خرید', sale_price: 'قیمت با تخفیف',
+  sale_until: 'پایان تخفیف', special_price: 'حمایت ویژه (تومان)',
+  hook: 'جمله‌ی گیرا', formats: 'قالب‌های عرضه',
+  cover: 'کاور (۳:۴)', cover_caption: 'توضیح زیر تصویر', image: 'عکس پدیدآورنده',
   book_id: 'شناسه‌ی کتاب',
 };
 
@@ -119,6 +128,8 @@ export class Sidebar {
   /* --- cards ------------------------------------------------------------- */
 
   _card({ id, title, fields }) {
+    const visible = id === 'access' ? this._visibleAccess(fields) : fields;
+
     const card = document.createElement('section');
     card.className = 'card' + (this.collapsed.has(id) ? ' is-collapsed' : '');
 
@@ -135,13 +146,28 @@ export class Sidebar {
 
     const body = document.createElement('div');
     body.className = 'card__body';
-    for (const field of fields) {
+    for (const field of visible) {
       const node = this._field(field);
       if (node) body.appendChild(node);
     }
 
     card.append(toggle, body);
     return card;
+  }
+
+  /* Preorder fields exist only while a release date stands, and the money
+     fields only while the work is premium. Turning premium on re-renders the
+     card - see the switch below - and so does setting release_date. */
+  _visibleAccess(fields) {
+    const fm = this.doc.frontmatter;
+    const premium = fm.get('premium') === true;
+    const preorder = fm.has('release_date');
+
+    return fields.filter((f) => {
+      if (['price', 'sale_price', 'sale_until', 'special_price'].includes(f)) return premium;
+      if (['preorder_price', 'hook', 'formats'].includes(f)) return preorder;
+      return true;
+    });
   }
 
   /** Lists frontmatter keys the form has no control for, so nothing feels lost. */
@@ -180,12 +206,23 @@ export class Sidebar {
       case 'language': return this._select(name, LANGUAGES, false);
       case 'reader':
       case 'premium': return this._switch(name);
-      case 'price': return this._price();
-      case 'date': return this._date();
-      case 'tags': return this._tags();
+      case 'price': return this._number(name, 'همین عدد به سوپابیس می‌رود.');
+      case 'preorder_price': return this._number(name, 'تا روز انتشار همین گرفته می‌شود.');
+      case 'sale_price': return this._number(name, 'باید از price کمتر باشد، وگرنه نادیده گرفته می‌شود.');
+      case 'special_price': return this._number(name, 'خالی بماند، سه برابر قیمت فعال می‌شود.');
+      case 'sale_until': return this._date(name);
+      case 'release_date': return this._date(name);
+      case 'release_time': return this._time(name);
+      case 'date': return this._date(name);
+      case 'tags': return this._list(name, 'کتاب، کتابخوانی، مجله‌ی اسب', 'با ویرگول جدا کن. هر هشتگ یک صفحه‌ی آرشیو می‌سازد.');
+      case 'formats': return this._list(name, 'وب, پی‌دی‌اف, ای‌پاب', 'با ویرگول جدا کن. روی صفحه‌ی پیش‌خرید چاپ می‌شود.');
       case 'summary': return this._textarea(name);
+      case 'summary_en': return this._textarea(name);
+      case 'cover_caption': return this._textarea(name);
       case 'book_id': return this._bookId();
       case 'slug': return this._slug();
+      case 'section': return this._text(name, 'گفت‌وگو، مقاله، نقد…');
+      case 'issue': return this._text(name, '۷ — شماره‌ی دفتر مجله، نه شماره‌ی مطلب');
       case 'series': return this._text(name, 'خالی بگذار اگر مستقل است');
       default: return this._text(name);
     }
@@ -426,27 +463,34 @@ export class Sidebar {
     return field;
   }
 
-  _price() {
-    const isPremium = this._valueOf('premium') === true;
-    if (!isPremium && !this.doc.frontmatter.has('price')) return null;
-
+  _number(name, hint) {
     const input = document.createElement('input');
     input.type = 'number';
-    input.id = 'fm-price';
+    input.id = `fm-${name}`;
     input.className = 'control control--ltr';
     input.min = '0';
     input.step = '1000';
-    input.value = this._valueOf('price') || '';
+    input.value = this._valueOf(name) || '';
     input.addEventListener('input', () => {
       const value = parseInt(input.value, 10);
-      this._set('price', Number.isFinite(value) ? value : 0);
+      this._set(name, Number.isFinite(value) ? value : null);
     });
 
-    return this._wrap('price', input, 'همین عدد به سوپابیس می‌رود.');
+    return this._wrap(name, input, hint);
   }
 
-  _date() {
-    const raw = enDigits(String(this._valueOf('date') || ''));
+  _time(name) {
+    const input = document.createElement('input');
+    input.type = 'time';
+    input.id = `fm-${name}`;
+    input.className = 'control control--ltr';
+    input.value = this._valueOf(name);
+    input.addEventListener('input', () => this._set(name, input.value || null));
+    return this._wrap(name, input, 'به وقت تهران. خالی بماند، 20:00 حساب می‌شود.');
+  }
+
+  _date(name) {
+    const raw = enDigits(String(this._valueOf(name) || ''));
     const parts = raw.split('-');
     const year = parts[0] || '1405';
     const month = parts[1] || '01';
@@ -485,34 +529,46 @@ export class Sidebar {
     }
     dSelect.value = day.padStart(2, '0');
 
-    const commit = () => this._set('date', `${ySelect.value}-${mSelect.value}-${dSelect.value}`);
+    const commit = () => {
+      this._set(name, `${ySelect.value}-${mSelect.value}-${dSelect.value}`);
+      // Preorder fields appear and disappear with release_date.
+      if (name === 'release_date') this.render(this.doc);
+    };
     [ySelect, mSelect, dSelect].forEach((el) => el.addEventListener('change', commit));
 
     row.append(ySelect, mSelect, dSelect);
-    return this._wrap('date', row, 'تاریخ شمسی، همان قالبی که build.py می‌خواند.');
+    const hint = name === 'date'
+      ? 'تاریخ شمسی، همان قالبی که build.py می‌خواند.'
+      : 'شمسی. در فایل گیومه‌دار نوشته می‌شود.';
+    return this._wrap(name, row, hint);
   }
 
-  _tags() {
-    const value = this._valueOf('tags');
+  _list(name, placeholder, hint) {
+    const value = this._valueOf(name);
     const input = document.createElement('input');
     input.type = 'text';
-    input.id = 'fm-tags';
+    input.id = `fm-${name}`;
     input.className = 'control';
-    input.placeholder = 'کتاب، کتابخوانی، مجله‌ی اسب';
+    input.placeholder = placeholder;
     input.value = Array.isArray(value) ? value.join('، ') : String(value || '');
     input.addEventListener('input', () => {
       const list = input.value.replace(/،/g, ',').split(',').map((t) => t.trim()).filter(Boolean);
-      this._set('tags', list);
+      this._set(name, list);
     });
-    return this._wrap('tags', input, 'با ویرگول جدا کن. هر هشتگ یک صفحه‌ی آرشیو می‌سازد.');
+    return this._wrap(name, input, hint);
   }
 
   _textarea(name) {
+    const placeholders = {
+      summary: 'اگر خالی بماند، برای آثار رایگان خودکار ساخته می‌شود.',
+      summary_en: 'One line in English.',
+      cover_caption: 'عکس از فلانی، ۱۳۹۸',
+    };
     const area = document.createElement('textarea');
     area.id = `fm-${name}`;
     area.className = 'control';
     area.rows = 3;
-    area.placeholder = 'اگر خالی بماند، برای آثار رایگان خودکار ساخته می‌شود.';
+    area.placeholder = placeholders[name] || '';
     area.value = this._valueOf(name);
     area.addEventListener('input', () => this._set(name, area.value.trim() || null));
     return this._wrap(name, area);

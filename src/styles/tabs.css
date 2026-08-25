@@ -115,6 +115,14 @@
 }
 .fn-text:focus { outline: none; border-color: var(--accent); }
 
+/* A Latin note runs its own way, flush left, in the same face the site gives
+   Latin source entries - the same rule preview.css already applies to
+   .sources-container li:dir(ltr). */
+.fn-text[dir='ltr'] {
+  text-align: left;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
 .fn-where {
   font-size: 0.7rem; color: var(--fg-faint);
   font-family: var(--font-mono); direction: ltr; unicode-bidi: isolate;

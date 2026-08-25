@@ -19,6 +19,7 @@
 import { createRenderer } from '../markdown/preview.js';
 import { readFootnotes } from '../model/footnotes.js';
 import { directionOfHtml } from '../markdown/direction.js';
+import { expandSiteBlocks } from '../markdown/site-blocks.js';
 import { makeZip } from './zip.js';
 import { MARKERS } from '../model/schema.js';
 
@@ -88,6 +89,40 @@ a.footnote-backref { text-decoration: none; margin: 0 6px; }
 
 table { width: 100%; border-collapse: collapse; margin: 1.4em 0; }
 th, td { border: 1px solid currentColor; padding: 0.4em 0.6em; text-align: start; }
+
+/* --- the guide's classes ------------------------------------------------ */
+.pullquote { font-size: 1.15em; font-weight: bold; text-align: center; text-indent: 0;
+             margin: 2em auto; padding: 0.8em 0; max-width: 34ch;
+             border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; }
+.colophon { font-size: 0.8em; text-align: left; text-indent: 0; margin-top: 2.4em; opacity: 0.75; }
+.editor-note { font-size: 0.85em; font-style: italic; text-indent: 0; margin-top: 1.6em;
+               padding-top: 0.5em; border-top: 1px solid currentColor; opacity: 0.85; }
+.small { font-size: 0.85em; }
+.mag-article-deck { font-size: 1.05em; text-indent: 0; opacity: 0.85; }
+.story-deck { font-size: 0.95em; text-indent: 0; opacity: 0.85; }
+mark { font-weight: bold; }
+
+/* In the book a scene break is white space, the way a printed page does it. */
+div.scene-break { visibility: hidden; margin: 2em 0; }
+
+.admonition { margin: 1.6em 0; padding: 0.7em 1.1em; text-indent: 0;
+              border: 1px solid currentColor; border-radius: 6px; }
+.admonition p { text-indent: 0; }
+.admonition-title { font-weight: bold; margin: 0 0 0.4em; }
+.admonition.note .admonition-title, .admonition.important .admonition-title,
+.admonition.hint .admonition-title { color: #8c6200; }
+.admonition.tip .admonition-title { color: #1d6a86; }
+.admonition.warning .admonition-title, .admonition.attention .admonition-title,
+.admonition.caution .admonition-title, .admonition.danger .admonition-title,
+.admonition.error .admonition-title { color: #a3302a; }
+
+details.admonition { margin: 1.6em 0; padding: 0.5em 1em; border: 1px solid currentColor; border-radius: 6px; }
+details.admonition summary { font-weight: bold; margin: 0.4em 0; }
+details.admonition p { text-indent: 0; }
+
+dl { margin: 1.4em 0; }
+dt { font-weight: bold; margin-top: 0.8em; }
+dd { margin: 0 1.4em 0.5em 0; opacity: 0.85; }
 
 .title-page { text-align: center; margin-top: 25%; }
 .title-page h1 { font-size: 1.9em; text-align: center; margin-bottom: 0.6em; }
@@ -180,8 +215,12 @@ function attachFootnotes(markdown, defs) {
    -------------------------------------------------------------------------- */
 
 function toXhtml(markdown) {
+  // The callouts and definition lists become HTML first, with the same
+  // expansion the site's extensions would apply.
+  let source = expandSiteBlocks(markdown, renderer);
+
   // The two structural markers are instructions to build.py, not content.
-  let source = markdown
+  source = source
     .split(MARKERS.ereader).join('')
     .split(MARKERS.paywall).join('')
     .replace(/<!--[\s\S]*?-->/g, '');

@@ -30,6 +30,9 @@ function toProse(body) {
   return body
     .replace(/```[\s\S]*?```/g, ' ')          // fenced code
     .replace(/<!--[\s\S]*?-->/g, ' ')          // comments and markers
+    .replace(/^\s*\/\/\/.*$/gm, ' ')           // admonition / details fences
+    .replace(/^\s*\*\[[^\]]+\]:.*$/gm, ' ')    // abbreviation definitions
+    .replace(/^\s*:[ \t].*$/gm, ' ')           // definition list entries
     .replace(/^\[\^[^\]]+\]:.*$/gm, ' ')       // footnote definitions
     .replace(/^\s*\{:?[^}]*\}\s*$/gm, ' ')     // attribute lines
     .replace(/\[\^[^\]]+\]/g, ' ')             // footnote references

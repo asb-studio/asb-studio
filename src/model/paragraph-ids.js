@@ -36,6 +36,8 @@ const SKIP = [
   /^\s{0,3}([-*+])\s/,          // unordered list item
   /^\s{0,3}\d+[.)]\s/,          // ordered list item
   /^\s{0,3}\[\^[^\]]+\]:/,      // footnote definition
+  /^\s{0,3}\*\[[^\]]+\]:/,      // abbreviation definition
+  /^\s{0,3}\/\/\//,             // admonition / details fence
   /^\s{0,3}</,                  // raw HTML block or comment marker
   /^\s{0,3}\|/,                 // table row
   /^\s{0,3}(`{3,}|~{3,})/,      // fenced code
@@ -85,6 +87,11 @@ export function assignParagraphIds(body) {
     if (wasInside || insideFence) return block;
 
     if (SKIP.some((re) => re.test(lines[0]))) return block;
+
+    // A closing /// inside the block means the fence would no longer be last,
+    // and a definition list rewrites its lines wholesale. Both stay untouched.
+    if (lines.some((l) => /^\s{0,3}\/\/\/\s*$/.test(l))) return block;
+    if (lines.some((l) => /^\s{0,3}:\s/.test(l))) return block;
 
     const lastIndex = lines.length - 1;
     const last = lines[lastIndex];

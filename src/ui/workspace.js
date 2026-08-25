@@ -13,6 +13,7 @@ import {
   listDocuments, readDocument, claimDocument, writeDocument, deleteDocument,
   suggestPath,
 } from '../storage/supabase.js';
+import { CATEGORIES } from '../model/schema.js';
 import * as dialog from './dialog.js';
 
 const fa = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -214,11 +215,27 @@ export async function pushToWorkspace(doc, fileName, content, handlers) {
   const suggestedName = slug || String(fileName).replace(/\.(md|markdown)$/i, '')
     .replace(/^بدون‌نام$/, '');
 
+  /* The folder is a CHOICE, not a spelling test. The sections come from the
+     same list the site uses (data/categories.json), the document's own
+     category pre-selects itself, and a legacy value that is no longer on the
+     list still shows - marked - rather than silently jumping somewhere else. */
+  const folderOptions = {};
+  for (const [slug, label] of Object.entries(CATEGORIES)) {
+    folderOptions[slug] = `${label} — ${slug}`;
+  }
+  if (category && !folderOptions[category]) {
+    folderOptions[category] = `${category} (قدیمی)`;
+  }
+  if (!category) {
+    folderOptions.main = 'بدون پوشه — main';
+  }
+
   const values = await dialog.form('ذخیره در فضای مشترک', [
     { name: 'name', label: 'نام فایل', value: suggestedName,
       hint: 'هرچه بخواهی. بعداً هم می‌شود عوضش کرد.' },
-    { name: 'folder', label: 'پوشه', value: category || 'main',
-      ltr: true, hint: 'اختیاری. جایی که در مخزن سایت می‌نشیند.' },
+    { name: 'folder', label: 'بخش', type: 'select',
+      value: category || 'main', options: folderOptions,
+      hint: 'همان بخشی از سایت که این نوشته به آن تعلق دارد.' },
   ], { confirmLabel: 'ذخیره' });
 
   if (!values || !values.name.trim()) return null;

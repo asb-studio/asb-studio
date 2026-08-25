@@ -72,6 +72,15 @@ function formatScalar(value) {
   }
 
   const s = String(value);
+
+  // A bare 1405-05-03 is a YAML timestamp and a bare 20:00 is a sexagesimal
+  // number - neither is the string build.py wants. The guide is explicit:
+  // تاریخ همیشه در گیومه. Quoting here means every WRITTEN date carries them;
+  // untouched lines keep whatever quoting they were found with.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s) || /^\d{1,2}:\d{2}$/.test(s)) {
+    return '"' + s + '"';
+  }
+
   if (s === '') return '""';
 
   // Characters that would break a bare YAML scalar or confuse a reader.
@@ -213,6 +222,19 @@ export class Frontmatter {
       this.present = true;
     }
     return this;
+  }
+
+  /**
+   * Regenerates one line from its parsed value under the CURRENT formatting
+   * rules. Used by normalizing so a bare legacy date picks up its quotes
+   * without anyone retyping it. Values are untouched - only the rendering.
+   */
+  reformat(key) {
+    const entry = this.entries.find((e) => e.kind === 'field' && e.key === key);
+    if (!entry || entry.value === null || entry.value === undefined) return false;
+    entry.raw = `${key}: ${formatScalar(entry.value)}`;
+    entry.dirty = true;
+    return true;
   }
 
   /** Removes a field entirely. */

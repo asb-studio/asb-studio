@@ -192,6 +192,18 @@ export async function deleteDocument(path) {
   if (error) throw error;
 }
 
+/**
+ * Erases the stored snapshot. Without this, a document whose tracking was
+ * stopped went on opening - on either laptop - with yesterday's tracker lit.
+ */
+export async function clearBaseline(path) {
+  const { error } = await supabase
+    .from('documents')
+    .update({ baseline: null })
+    .eq('path', path);
+  if (error) throw error;
+}
+
 /* --------------------------------------------------------------------------
    Leaving
 

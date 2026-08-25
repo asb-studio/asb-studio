@@ -1,16 +1,15 @@
 {
-  "generated": "manual",
+  "generated": "manual, synced with build.py CATEGORY_CONFIG",
   "source": "build.py CATEGORY_CONFIG",
   "categories": {
     "novel": "رمان",
+    "novelette": "داستان بلند",
     "short-story/single": "تک‌داستان کوتاه",
     "short-story/collection": "مجموعه‌داستان کوتاه",
     "flash-fiction/single": "تک‌داستان برق‌آسا",
     "flash-fiction/collection": "مجموعه‌داستان برق‌آسا",
     "non-fiction/essay/single": "تک‌جستار",
     "non-fiction/essay/collection": "مجموعه‌جستار",
-    "non-fiction/article/single": "تک‌مقاله",
-    "non-fiction/article/collection": "مجموعه‌مقاله",
     "magazine": "مجله‌ی اسب",
     "creators": "پدیدآورندگان"
   }

@@ -76,18 +76,9 @@ function fixHeadingAttrs(lines, skip) {
   return count;
 }
 
-/* build.py looks for a heading containing «سرچشمه». One that says «منابع» is
-   never found, so the sources block loses its styling. */
-function fixSourcesHeading(lines, skip) {
-  let count = 0;
-  lines.forEach((line, i) => {
-    if (skip.has(i)) return;
-    if (!/^#{1,6}\s/.test(line) || !/منابع/.test(line) || /سرچشمه/.test(line)) return;
-    lines[i] = line.replace(/منابع/, 'سرچشمه‌ها');
-    count++;
-  });
-  return count;
-}
+/* build.py accepts five sources headings - سرچشمه، سرچشمه‌ها، کتابنامه،
+   کتاب‌نامه، منابع - so a heading rename here would be a "fix" to something
+   that was never broken. The rule is gone; see RAHNAMANEVESHTAN.md بخش هشت. */
 
 /* Pandoc's bracketed span is not a feature of Python-Markdown and prints
    verbatim. The supported equivalent attaches to a real inline element, so
@@ -117,7 +108,6 @@ export const FIXES = [
   { rule: 'attr-same-line', label: 'ویژگی پاراگراف روی همان خط', apply: fixAttrSameLine },
   { rule: 'heading-attr-own-line', label: 'ویژگی عنوان در خط جدا', apply: fixHeadingAttrs },
   { rule: 'pandoc-span', label: 'نحو پندوکی [متن]{.کلاس}', apply: fixPandocSpans },
-  { rule: 'sources-heading', label: 'عنوان «منابع» به‌جای «سرچشمه‌ها»', apply: fixSourcesHeading },
 ];
 
 /**

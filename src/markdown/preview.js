@@ -24,6 +24,7 @@ import { MarkdownIt, footnote } from '../../vendor/markdown-it.js';
 import { markupForPreview } from './critic.js';
 import { diffWords } from './diff.js';
 import { directionOfHtml } from './direction.js';
+import { expandSiteBlocks } from './site-blocks.js';
 
 /* Sentinel used to hide a literal backslash from markdown-it's line-break
    rule. A private use area codepoint cannot occur in real Persian prose. */
@@ -155,6 +156,11 @@ export function renderPreview(body) {
   // one deliberate departure from the site, and it is safe because a document
   // still carrying marks is blocked from publishing - see model/validate.js.
   source = markupForPreview(source);
+
+  // The site's four non-Markdown features - /// callouts, definition lists,
+  // abbreviations - are expanded into HTML here, exactly what build.py's
+  // extensions would produce.
+  source = expandSiteBlocks(source, md);
 
   // The two structural markers are HTML comments, so they are invisible in a
   // faithful render. Showing them as labelled rules is the one deliberate

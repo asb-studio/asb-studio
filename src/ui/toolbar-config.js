@@ -21,12 +21,12 @@ const KEY = 'asb-studio:toolbar';
    writing, marking up, footnoting and getting a file ready to publish. */
 export const DEFAULT_TOOLS = [
   'undo', 'redo',
-  'bold', 'italic', 'strike', 'code',
+  'bold', 'italic', 'strike', 'code', 'mark',
   'h1', 'h2', 'h3', 'quote', 'list',
-  'poem', 'center', 'noindent', 'colour',
+  'poem', 'center', 'noindent', 'pullquote', 'colour',
   'link', 'image', 'table', 'footnote',
-  'ereader', 'paywall',
-  'excerpt',
+  'ereader', 'excerpt', 'paywall', 'scene-break',
+  'admonition', 'details',
   'find', 'ids', 'review', 'publish',
 ];
 

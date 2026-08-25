@@ -239,11 +239,50 @@ function wordDiff(a, b, push) {
   push('same', ta.slice(ta.length - tail).join(''));
 }
   
-/** Just the changes, numbered the way the review panel lists them. */
+/* Units = same runs + changes, with adjacent del/ins pairs fused into one
+   substitution. resolveChange walks THIS list - the same runs carry the
+   untouched text, and losing them is how a rebuild once amputated the middle
+   of the document. */
+function mergeUnits(ops) {
+  const units = [];
+
+  for (const op of ops) {
+    if (op.type === 'same') { units.push({ ...op }); continue; }
+
+    const last = units[units.length - 1];
+    const pair = last && last.type !== 'same'
+      && ((last.type === 'del' && op.type === 'ins') || (last.type === 'ins' && op.type === 'del'));
+
+    if (pair) {
+      units[units.length - 1] = {
+        type: 'sub',
+        before: last.type === 'del' ? last.text : op.text,
+        after: last.type === 'del' ? op.text : last.text,
+        aFrom: Math.min(last.aFrom, op.aFrom), aTo: Math.max(last.aTo, op.aTo),
+        bFrom: Math.min(last.bFrom, op.bFrom), bTo: Math.max(last.bTo, op.bTo),
+      };
+      continue;
+    }
+
+    units.push({ ...op });
+  }
+
+  return units;
+}
+
+/** Just the changes, numbered the way the review panel lists them.
+ *
+ * An adjacent del+ins pair is ONE substitution - the way Word shows one.
+ * Resolving its halves separately is what made the tracker chase its own
+ * tail: rejecting the del of «دوم → دومِ» re-inserted the word next to its
+ * replacement, the re-diff fused the two into a new token, and every further
+ * click duplicated it. Merged, a substitution accepts whole (baseline takes
+ * the new text) or rejects whole (text takes the old) - and the walk always
+ * settles. */
 export function changeList(before, after) {
-  return diffWords(before, after)
-    .filter((op) => op.type !== 'same')
-    .map((op, index) => ({ ...op, index }));
+  return mergeUnits(diffWords(before, after))
+    .filter((unit) => unit.type !== 'same')
+    .map((change, index) => ({ ...change, index }));
 }
 
 /* --------------------------------------------------------------------------
@@ -259,27 +298,46 @@ export function changeList(before, after) {
    -------------------------------------------------------------------------- */
 
 /**
+ * Resolves one change by REBUILDING both texts from the (merged) change
+ * list, never by slicing raw strings at offsets.
+ *
+ * The offsets a diff produces belong to its NORMALIZED inputs; slicing the
+ * raw originals with them is how a CRLF baseline got cut in the wrong place.
+ * Reconstruction cannot cut at all: the changes carry every character of
+ * both sides in order, so toggling ONE of them and re-walking the list is
+ * exact by construction.
+ *
+ *   accept  the change joins the baseline
+ *           ins: baseline gains it · del: baseline loses it · sub: takes the new text
+ *   reject  the change leaves the text
+ *           ins: dropped · del: restored · sub: takes the old text
+ *
  * @param {'accept'|'reject'} action
  * @returns {{ before: string, after: string }} the two texts afterwards
  */
 export function resolveChange(before, after, index, action) {
-  const changes = changeList(before, after);
-  const op = changes[index];
-  if (!op) return { before, after };
+  const units = mergeUnits(diffWords(before, after));
+  const target = units.filter((unit) => unit.type !== 'same')[index];
+  if (!target) return { before, after };
 
-  if (action === 'accept') {
-    // The old text catches up: an insertion is added to it, a deletion removed.
-    const patched = op.type === 'ins'
-      ? before.slice(0, op.aFrom) + op.text + before.slice(op.aFrom)
-      : before.slice(0, op.aFrom) + before.slice(op.aTo);
-    return { before: patched, after };
-  }
+  const buildBaseline = () => units.map((unit) => {
+    if (unit.type === 'same') return unit.text;
+    if (unit === target && action === 'accept') {
+      return unit.type === 'del' ? '' : (unit.type === 'sub' ? unit.after : unit.text);
+    }
+    return unit.type === 'del' ? unit.text : '';
+  }).join('');
 
-  // Reject: the new text goes back to what it was.
-  const patched = op.type === 'ins'
-    ? after.slice(0, op.bFrom) + after.slice(op.bTo)
-    : after.slice(0, op.bFrom) + op.text + after.slice(op.bFrom);
-  return { before, after: patched };
+  const buildText = () => units.map((unit) => {
+    if (unit.type === 'same') return unit.text;
+    if (unit === target && action === 'reject') {
+      return unit.type === 'ins' ? '' : (unit.type === 'sub' ? unit.before : unit.text);
+    }
+    return unit.type === 'ins' ? unit.text : '';
+  }).join('');
+
+  if (action === 'accept') return { before: buildBaseline(), after };
+  return { before, after: buildText() };
 }
 
 /** How much changed, for a summary line. */

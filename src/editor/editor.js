@@ -368,6 +368,12 @@ export class MarkdownEditor {
     return state.sliceDoc(state.selection.main.from, state.selection.main.to);
   }
 
+  /** The selection as a range, or null when nothing is selected. */
+  getSelectionRange() {
+    const range = this.view.state.selection.main;
+    return range.empty ? null : { from: range.from, to: range.to };
+  }
+
   /* --- block editing ------------------------------------------------------ */
 
   /**

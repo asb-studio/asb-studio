@@ -14,6 +14,7 @@
    ========================================================================== */
 
 import { readFootnotes, setFootnoteText, removeFootnote, renumberFootnotes } from '../model/footnotes.js';
+import { textDirection } from '../markdown/direction.js';
 import { attachRichControls } from './rich-field.js';
 
 const fa = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -97,11 +98,23 @@ export class FootnotePanel {
     field.placeholder = 'متن پانویس…';
     field.setAttribute('aria-label', `متن پانویس ${note.id}`);
 
+    /* The note's own language steers its own box, the way build.py sets
+       dir per note on the site: one Persian letter anywhere makes it
+       right-to-left; a note with no Persian in it runs left-to-right and
+       sits flush left. An empty box stays RTL - the studio is Persian first.
+       Re-checked on every input, so pasting an English source flips the box
+       without anyone touching a setting. */
+    const followText = () => {
+      const next = field.value.trim() ? textDirection(field.value) : 'rtl';
+      if (field.dir !== next) field.dir = next;
+    };
+    followText();
+
     const grow = () => {
       field.style.height = 'auto';
       field.style.height = `${field.scrollHeight}px`;
     };
-    field.addEventListener('input', grow);
+    field.addEventListener('input', () => { grow(); followText(); });
     requestAnimationFrame(grow);
 
     // Written back on blur rather than on every keystroke: rewriting the whole

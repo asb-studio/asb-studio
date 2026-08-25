@@ -23,7 +23,7 @@ import { hasEmbeddedFrontmatter, liftEmbeddedFrontmatter } from './model/documen
 import { assignParagraphIds, countMissingIds } from './model/paragraph-ids.js';
 import { validateAll } from './model/validate.js';
 import { normalizeFrontmatter, previewNormalize } from './model/normalize.js';
-import { BLOCK_COLOURS, loadCategories, todayJalali } from './model/schema.js';
+import { BLOCK_COLOURS, loadCategories, todayJalali, ADMONITION_KINDS, MARKERS } from './model/schema.js';
 import { measure } from './model/stats.js';
 import { readFootnotes, nextFootnoteId } from './model/footnotes.js';
 import { UsageTracker } from './model/usage.js';
@@ -744,6 +744,50 @@ const ctx = {
     if (markdown) app.editor.insertBlock(markdown);
   },
 
+  /* The /// callout the site paints by tone: the type decides the colour,
+     the title is free text. Same three lines the guide teaches. */
+  async insertAdmonition() {
+    const options = {};
+    for (const [key, meta] of Object.entries(ADMONITION_KINDS)) {
+      options[key] = `${meta.label} (${key})`;
+    }
+
+    const values = await dialog.form('جعبه‌ی هشدار', [
+      { name: 'kind', label: 'نوع', type: 'select', value: 'note', options,
+        hint: 'رنگ از روی نوع می‌آید: اخرایی، آبی، قرمز.' },
+      { name: 'title', label: 'عنوان', value: '',
+        hint: 'اختیاری — خالی بگذاری، نام خودِ نوع می‌نشیند.' },
+    ], { confirmLabel: 'درج' });
+    if (!values) return;
+
+    const meta = ADMONITION_KINDS[values.kind];
+    const title = values.title.trim() || (meta ? meta.label : values.kind);
+    app.editor.insertBlock(`/// ${values.kind} | ${title}\n\nمتن.\n\n///`);
+    markDirty(true);
+    refresh();
+  },
+
+  /* The collapsible box — افشای پایان، پرسش‌وپاسخ. open: true needs its four
+     spaces and a blank line after it; that is the one place indentation
+     carries meaning in this pipeline. */
+  async insertDetails() {
+    const values = await dialog.form('بخش تاشو', [
+      { name: 'title', label: 'عنوان', value: '',
+        placeholder: 'پایان داستان را می‌خواهید بدانید؟' },
+      { name: 'open', label: 'از اول باز باشد؟', type: 'select', value: 'no',
+        options: { no: 'بسته — خواننده خودش باز کند', yes: 'باز' } },
+    ], { confirmLabel: 'درج' });
+    if (!values) return;
+
+    const title = values.title.trim() || 'بیشتر';
+    const head = values.open === 'yes'
+      ? `/// details | ${title}\n    open: true\n`
+      : `/// details | ${title}\n`;
+    app.editor.insertBlock(`${head}\nمتن.\n\n///`);
+    markDirty(true);
+    refresh();
+  },
+
   /* The reference goes in at the caret, the definition at the end of the file,
      and the drawer opens so the text can be written straight away. */
   /* Reference at the caret, definition at the foot of the file - and the view
@@ -1083,6 +1127,24 @@ const ctx = {
     }
   },
 
+  /* The excerpt wraps the author's SELECTION - one paragraph or ten, whatever
+     they highlighted. START lands above it, END below it; no sample text is
+     invented and nothing else moves. */
+  insertExcerpt() {
+    const range = app.editor.getSelectionRange();
+    if (!range) {
+      toast('اول متنِ بریده را انتخاب کن — هر چند بند که خواستی');
+      return;
+    }
+
+    const selected = app.editor.getSelectionText();
+    app.editor.replaceSelection(
+      `${MARKERS.excerptStart}\n\n${selected}\n\n${MARKERS.excerptEnd}`);
+    markDirty(true);
+    refresh();
+    toast('بریده ساخته شد — یادت باشد بالای دیوار پرداخت باشد');
+  },
+
   /* --- file, view and app-level commands, so the menus can reach them --- */
   newDocument() { app.session.openBlank(); activate(app.session.activeId); },
   openDocument() { doOpen(); },
@@ -1117,22 +1179,32 @@ const ctx = {
 
     syncLoadedTab();
     const plan = previewNormalize(current.doc);
+    const idle = plan.added.length === 0 && plan.removed.length === 0
+      && plan.requoted.length === 0 && !plan.outOfOrder;
 
-    if (plan.missing.length === 0 && !plan.outOfOrder) {
+    if (idle) {
       await dialog.say('مرتب کردن شناسنامه', 'شناسنامه از قبل مرتب است.');
       return;
     }
 
     const node = document.createElement('div');
     node.innerHTML = `
-      ${plan.missing.length ? `
-        <p class="dialog__text">این فیلدها با مقدار پیش‌فرض اضافه می‌شوند:</p>
-        ${plan.missing.map((k) => `
+      ${plan.added.length ? `
+        <p class="dialog__text">این فیلدهای ساختاری اضافه می‌شوند:</p>
+        ${plan.added.map((k) => `
           <div class="repair__row"><span class="mono">${esc(k)}</span></div>`).join('')}` : ''}
-      ${plan.outOfOrder ? '<p class="dialog__text">ترتیب فیلدها هم به شکل استاندارد درمی‌آید.</p>' : ''}
+      ${plan.removed.length ? `
+        <p class="dialog__text">این خانه‌های خالی پاک می‌شوند — build.py فایلِ کلید خالی را رد می‌کند:</p>
+        ${plan.removed.map((k) => `
+          <div class="repair__row"><span class="mono">${esc(k)}</span>
+            <span class="count">خالی</span></div>`).join('')}` : ''}
+      ${plan.requoted.length ? `
+        <p class="dialog__text">این تاریخ‌ها گیومه می‌گیرند:</p>
+        ${plan.requoted.map((k) => `
+          <div class="repair__row"><span class="mono">${esc(k)}</span></div>`).join('')}` : ''}
+      ${plan.outOfOrder ? '<p class="dialog__text">ترتیب فیلدها هم به ترتیب راهنما درمی‌آید.</p>' : ''}
       <p class="dialog__text" style="color:var(--fg-dim);font-size:0.79rem">
-        فیلدهایی که استودیو نمی‌شناسد — مثل summary و price و socials — دست نمی‌خورند و
-        بعد از بلوک استاندارد سرجایشان می‌مانند.
+        فیلدهایی که استودیو نمی‌شناسد دست نمی‌خورند و بعد از بلوک استاندارد سرجایشان می‌مانند.
       </p>`;
 
     const go = await dialog.custom('مرتب کردن شناسنامه', node, [
@@ -1234,8 +1306,8 @@ const ctx = {
         created.readOnly = readOnly;
 
         /* The editor's snapshot came with the document, so the same changes
-           are visible on both sides. */
-        if (baseline) startTracking(created, baseline);
+           are visible on both sides. An empty string is no snapshot. */
+        if (baseline && String(baseline).trim()) startTracking(created, baseline);
 
         activate(created.id);
         activate(created.id);
@@ -1497,6 +1569,9 @@ const ctx = {
 
     if (isTracking(current)) {
       stopTracking(current);
+      // The stored snapshot goes with it - otherwise the document went on
+      // opening, on either laptop, with yesterday's tracker lit.
+      if (current.remotePath) remote.clearBaseline(current.remotePath).catch(() => {});
       updateStatusBar();
       toast('ردیاب خاموش شد');
       return;
@@ -1928,21 +2003,24 @@ function changeRow(change) {
   row.className = 'rv-row';
 
   const kind = document.createElement('span');
-  kind.className = `rv-kind rv-kind--${change.type === 'ins' ? 'insert' : 'delete'}`;
-  kind.textContent = change.type === 'ins' ? 'افزوده' : 'حذف';
+  kind.className = `rv-kind rv-kind--${change.type === 'del' ? 'delete' : 'insert'}`;
+  kind.textContent = change.type === 'ins' ? 'افزوده'
+    : change.type === 'sub' ? 'جایگزینی' : 'حذف';
 
   const text = document.createElement('div');
   text.className = 'rv-text';
-  const inner = document.createElement(change.type === 'ins' ? 'ins' : 'del');
-  inner.textContent = change.text.replace(/\s+/g, ' ').trim() || '(فاصله)';
+  const inner = document.createElement(change.type === 'del' ? 'del' : 'ins');
+  inner.textContent = change.type === 'sub'
+    ? `${change.before.replace(/\s+/g, ' ').trim()} ← ${change.after.replace(/\s+/g, ' ').trim()}`
+    : (change.text.replace(/\s+/g, ' ').trim() || '(فاصله)');
   text.appendChild(inner);
 
   const actions = document.createElement('div');
   actions.className = 'rv-actions';
 
-  // Only an insertion exists in the current text, so only that one can be
-  // jumped to. A deletion is not there to scroll to.
-  if (change.type === 'ins') {
+  // An insertion and a substitution exist in the current text and can be
+  // jumped to. A pure deletion is not there to scroll to.
+  if (change.type !== 'del') {
     const go = document.createElement('button');
     go.type = 'button';
     go.className = 'rv-where';
@@ -1955,13 +2033,13 @@ function changeRow(change) {
   accept.type = 'button';
   accept.className = 'btn btn--primary';
   accept.textContent = 'بپذیر';
-  accept.addEventListener('click', () => resolveOne(change.index, 'accept'));
+  accept.addEventListener('click', () => resolveById(change, 'accept'));
 
   const reject = document.createElement('button');
   reject.type = 'button';
   reject.className = 'btn btn--outline';
   reject.textContent = 'رد کن';
-  reject.addEventListener('click', () => resolveOne(change.index, 'reject'));
+  reject.addEventListener('click', () => resolveById(change, 'reject'));
 
   actions.append(accept, reject);
   row.append(kind, text, actions);
@@ -2020,18 +2098,38 @@ function resolveOne(index, action) {
   const baseline = baselineOf(current);
   if (baseline === null) return;
 
-  const result = resolveChange(baseline, app.editor.getText(), index, action);
+  const body = app.editor.getText();
+  const result = resolveChange(baseline, body, index, action);
 
-  if (result.after !== app.editor.getText()) {
+  if (result.after !== body) {
     app.editor.setText(result.after);
     markDirty(true);
   }
-  rebaseline(current, result.before);
+  // A baseline that could not be stored means the next click resolves a diff
+  // against the OLD snapshot - the panel would never settle. Say so.
+  if (!rebaseline(current, result.before)) {
+    toast('حافظه‌ی مرورگر پر است — نسخه‌ی مبنا ذخیره نشد');
+  }
 
   const left = changeList(result.before, result.after).length;
   if (reviewCursor >= left) reviewCursor = Math.max(0, left - 1);
 
   refresh();
+}
+
+/* The row was rendered from an older diff, and the text may have moved on
+   since. The change is found again by what it IS - type, place, content -
+   not by the position it held when the list was drawn. */
+function resolveById(change, action) {
+  const current = tab();
+  const baseline = current ? baselineOf(current) : null;
+
+  if (baseline === null) { resolveOne(change.index, action); return; }
+
+  const fresh = changeList(baseline, app.editor.getText());
+  const at = fresh.findIndex((c) =>
+    c.type === change.type && c.bFrom === change.bFrom && c.bTo === change.bTo);
+  resolveOne(at === -1 ? change.index : at, action);
 }
 
 /**
@@ -2060,7 +2158,9 @@ async function resolveAll(action, stop) {
 
   if (action === 'accept') {
     // The new text is right, so it becomes the starting point.
-    rebaseline(current, current.doc.body);
+    if (!rebaseline(current, current.doc.body)) {
+      toast('حافظه‌ی مرورگر پر است — نسخه‌ی مبنا ذخیره نشد');
+    }
   } else {
     // The old text was right, so the document goes back to it.
     app.editor.setText(baseline);
@@ -2241,7 +2341,16 @@ function boot() {
   const panelHandlers = {
     onClose: () => { closeOtherDrawers(null); syncDrawerHeight(); },
     getBody: () => app.editor.getText(),
-    setBody: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
+    setBody: (text) => {
+      // setText resets the selection to the top of the document; saving the
+      // caret first and putting it back afterwards keeps the view where the
+      // author left it. The same dance assignIds() already does.
+      const caret = app.editor.getCaret();
+      app.editor.setText(text);
+      app.editor.setCaret(caret);
+      markDirty(true);
+      refresh();
+    },
     goToLine: (line) => app.editor.goToLine(line),
     toast,
     confirm: (title, message) => dialog.ask(title, message, { danger: true }),
@@ -2321,18 +2430,36 @@ function boot() {
       return;
     }
 
-    /* Tab switching lives on Ctrl+Alt, and every other combination was tried
-       first: Ctrl+W and Ctrl+Tab belong to the browser and Chrome ignores
-       preventDefault on them; plain Alt+Left and Alt+Right are back and
-       forward; Alt+digit is taken on some platforms. Ctrl+Alt is free. */
+    /* Tab switching lives on Ctrl+Alt: Ctrl+W and Ctrl+Tab belong to the
+       browser and Chrome ignores preventDefault on them; plain Alt+Left and
+       Alt+Right are back and forward. Ctrl+Alt is free. */
     if (e.altKey && (e.ctrlKey || e.metaKey)) {
-      // Digit1..Digit9, not the character - a Persian layout prints ۱ here.
-      const digit = /^Digit([1-9])$/.exec(e.code);
-      if (digit) {
-        const target = app.session.tabs[Number(digit[1]) - 1];
-        if (target) { e.preventDefault(); activate(target.id); }
-        return;
+      /* The four typographic quotes - TOP ROW and NUMPAD both, since the top
+         row no longer jumps tabs by number. That jump cost four keys every
+         writer reaches for; the arrows still cycle and Ctrl+Alt+W still
+         closes. Numpad keys keep the NumLock guard: with NumLock off they
+         are End and Home, and navigation wins. And the insertion is skipped
+         while another field - a footnote, the find box - holds the focus, so
+         a quote never lands three panes away from the keys. */
+      const quote = {
+        Digit1: '\u2018', Digit2: '\u2019', Digit3: '\u201C', Digit4: '\u201D',
+        Numpad1: '\u2018', Numpad2: '\u2019', Numpad3: '\u201C', Numpad4: '\u201D',
+      }[e.code];
+
+      if (quote) {
+        const numlockOk = !e.code.startsWith('Numpad') || e.getModifierState('NumLock');
+        const active = document.activeElement;
+        const elsewhere = active && active !== document.body
+          && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
+          && !$('#editor').contains(active);
+
+        if (numlockOk && !elsewhere) {
+          e.preventDefault();
+          app.editor.replaceSelection(quote);
+          return;
+        }
       }
+
       if (e.code === 'KeyW') {
         e.preventDefault();
         if (tab()) closeTab(tab().id);

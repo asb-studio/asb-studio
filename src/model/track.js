@@ -16,14 +16,28 @@
    change to the text; it is something said about it, and no comparison can
    guess at it.
 
-   The snapshot belongs to the person editing rather than to the file, so it
-   lives in this browser and never reaches the .md.
+   WHERE THE SNAPSHOT LIVES, AND WHY IT SPLIT:
+
+     A workspace PATH is unique everywhere, so its baseline persists in
+     localStorage and survives a reload.
+     A LOCAL file is keyed by its NAME alone - and half the archive is called
+     index.md. A persistent map keyed that way let one file's baseline light
+     the tracker for a stranger that happened to share the name. So local
+     tracking is SESSION-ONLY: it lives in memory, dies with the tab, and can
+     never haunt the next document.
+
+   Baselines are stored normalized (\n). The editor text is \n already; a
+   CRLF baseline straight from the workspace used to shift every offset
+   after its first carriage return.
 
    This module must never touch the DOM.
    ========================================================================== */
 
 const KEY = 'asb-studio:tracking';
 
+const normalizeText = (text) => String(text || '').replace(/\r\n?/g, '\n');
+
+/* The persistent map: workspace paths only. */
 function read() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -44,6 +58,9 @@ function write(map) {
   }
 }
 
+/* The session map: local files. Dies with the tab, by design. */
+const session = new Map();
+
 /** A stable key for a document: its workspace path, or its file name. */
 export function documentKey(tab) {
   if (!tab) return null;
@@ -52,7 +69,8 @@ export function documentKey(tab) {
 
 export function isTracking(tab) {
   const key = documentKey(tab);
-  return Boolean(key && read()[key]);
+  if (!key) return false;
+  return tab.remotePath ? Boolean(read()[key]) : session.has(key);
 }
 
 /**
@@ -63,45 +81,51 @@ export function startTracking(tab, body) {
   const key = documentKey(tab);
   if (!key) return false;
 
-  const map = read();
-  map[key] = { since: Date.now(), baseline: String(body) };
-  return write(map);
+  const entry = { since: Date.now(), baseline: normalizeText(body) };
+  if (tab.remotePath) return write({ ...read(), [key]: entry });
+  session.set(key, entry);
+  return true;
 }
 
 export function stopTracking(tab) {
   const key = documentKey(tab);
   if (!key) return;
 
-  const map = read();
-  delete map[key];
-  write(map);
+  if (tab.remotePath) {
+    const map = read();
+    delete map[key];
+    write(map);
+  } else {
+    session.delete(key);
+  }
 }
 
 /** The text as it was when recording started, or null. */
 export function baselineOf(tab) {
   const key = documentKey(tab);
-  const entry = key ? read()[key] : null;
+  if (!key) return null;
+  const entry = tab.remotePath ? read()[key] : session.get(key);
   return entry ? entry.baseline : null;
 }
 
 export function trackingSince(tab) {
   const key = documentKey(tab);
-  const entry = key ? read()[key] : null;
+  if (!key) return null;
+  const entry = tab.remotePath ? read()[key] : session.get(key);
   return entry ? entry.since : null;
 }
 
 /**
  * Moves the baseline forward to the current text - everything up to now is
- * accepted as the new starting point. Used after a report has been sent and
- * a fresh pass begins.
+ * accepted as the new starting point. Used after a change has been accepted
+ * or a report has been sent and a fresh pass begins.
  */
 export function rebaseline(tab, body) {
   const key = documentKey(tab);
   if (!key) return false;
 
-  const map = read();
-  if (!map[key]) return false;
-
-  map[key] = { since: Date.now(), baseline: String(body) };
-  return write(map);
+  const entry = { since: Date.now(), baseline: normalizeText(body) };
+  if (tab.remotePath) return write({ ...read(), [key]: entry });
+  session.set(key, entry);
+  return true;
 }

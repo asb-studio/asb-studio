@@ -764,12 +764,6 @@ function clean(text) {
   return String(text)
     .replace(/\u00a0/g, ' ')        // Word's non-breaking space
     .replace(/\u0640+/g, '')        // kashida, a typesetting artefact
-    /* HARAKAT, BUT NOT THE TANWIN. U+064B sits at the start of the harakat
-       range, so stripping the range took «لطفاً» down to «لطفا» - and that is
-       not a decoration coming off, it is a spelling being broken. The tanwin
-       is part of how the word is written in Persian; fatha, kasra and damma
-       are not. The range now starts one codepoint later. */
-    .replace(/[\u064c-\u0652]/g, '')
     .replace(/\u064a/g, '\u06cc')   // Arabic ya  -> Persian
     .replace(/\u0649/g, '\u06cc')   // alef maqsura
     .replace(/\u0643/g, '\u06a9')   // Arabic kaf -> Persian

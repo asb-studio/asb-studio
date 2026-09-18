@@ -2361,7 +2361,15 @@ function boot() {
   app.find = new FindPanel($('#find'), {
     onClose: () => { closeOtherDrawers(null); syncDrawerHeight(); },
     getText: () => app.editor.getText(),
-    setText: (text) => { app.editor.setText(text); markDirty(true); refresh(); },
+    setText: (text) => {
+      // setText resets the selection to the top of the document; without
+      // saving and restoring the caret, replacing jumps the page to line one.
+      const caret = app.editor.getCaret();
+      app.editor.setText(text);
+      app.editor.setCaret(caret);
+      markDirty(true);
+      refresh();
+    },
     goTo: (from, to) => app.editor.select(from, to),
     toast,
   });
